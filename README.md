@@ -1,6 +1,6 @@
 # UIKA Lab
 
-UIKA Lab 是华东理工大学 Robocon 无贰战队参加仿生足式比赛的代码仓库。仓库基于 Isaac Lab 搭建 UIKA 四足机器人强化学习训练、策略导出、仿真验证与 Sim2Real 部署流程。
+UIKA Lab 是华东理工大学 Robocon 无贰战队参加仿生足式比赛的代码仓库。本仓库基于 [IsaacZH/himloco_lab](https://github.com/IsaacZH/himloco_lab) 增加 UIKA 任务，使用 Isaac Lab 搭建 UIKA 四足机器人强化学习训练、策略导出、仿真验证与 Sim2Real 部署流程。
 
 ## 项目说明
 
@@ -11,7 +11,7 @@ UIKA Lab 是华东理工大学 Robocon 无贰战队参加仿生足式比赛的�
 - 参考 RobotLab 的速度跟踪、稳定性、能耗与动作平滑等奖励项设计
 - 面向仿生足式比赛场景的平地、坡面、台阶、离散障碍等地形训练配置
 - 策略导出、Sim2Sim 验证与基于 rl_sar 的 Sim2Real 部署流程
-- 使用 PACE 参数辨识方法进行机器人模型与控制参数校准
+- 使用 [PACE](https://github.com/leggedrobotics/pace-sim2real) 参数辨识方法进行机器人模型与控制参数校准
 
 ## 技术路线
 
@@ -30,7 +30,7 @@ UIKA Lab 是华东理工大学 Robocon 无贰战队参加仿生足式比赛的�
 
 ### Sim2Real
 
-Sim2Real 部署使用 rl_sar 作为策略运行和实机控制框架。部署前先在 MuJoCo 中完成 Sim2Sim 验证，再结合 PACE 参数辨识结果修正质量、质心、惯量、关节阻尼、PD 参数等关键参数，降低训练仿真与实机之间的差异。
+Sim2Real 部署使用 rl_sar 作为策略运行和实机控制框架。部署前先在 MuJoCo 中完成 Sim2Sim 验证，再结合 [PACE](https://github.com/leggedrobotics/pace-sim2real) 参数辨识结果修正质量、质心、惯量、关节阻尼、PD 参数等关键参数，降低训练仿真与实机之间的差异。
 
 ## 仓库结构
 
@@ -56,26 +56,39 @@ himloco_lab/
 └── docs/                            # 项目文档
 ```
 
-## 环境安装
+## 安装指南
 
 ### 1. 安装 Isaac Lab
 
-请先按照 Isaac Lab 官方文档安装 Isaac Sim 与 Isaac Lab，并确认当前 Python 环境可以正常运行 Isaac Lab。
+按照 [Isaac Lab 官方安装指南](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/pip_installation.html) 安装 Isaac Lab。
+推荐使用 pip 安装方式。
 
-### 2. 克隆仓库
+### 2. 克隆本仓库
+
+将本仓库克隆到 Isaac Lab 外的独立目录中：
 
 ```bash
 git clone https://github.com/SAIKi0125/UIKA_lab.git
 cd UIKA_lab
 ```
 
-### 3. 安装本项目
+### 3. 安装 UIKA Lab
 
 ```bash
 python -m pip install -e source/himloco_lab
 ```
 
-### 4. 查看环境注册情况
+### 4. UIKA 机器人描述文件
+
+UIKA 的 URDF 和 mesh 文件已经包含在仓库中：
+
+```text
+source/himloco_lab/himloco_lab/assets/uika/
+```
+
+无需额外下载机器人模型文件。若后续更换 UIKA 模型，请保持 URDF 中 mesh 路径与该目录结构一致。
+
+### 5. 查看环境注册情况
 
 ```bash
 python scripts/list_envs.py
@@ -140,4 +153,4 @@ UIKA 的主要训练配置位于：
 - [Isaac Lab](https://isaac-sim.github.io/IsaacLab/)
 - [RobotLab](https://github.com/fan-ziqi/robot_lab)
 - [rl_sar](https://github.com/fan-ziqi/rl_sar)
-- PACE 参数辨识方法
+- [PACE Sim2Real](https://github.com/leggedrobotics/pace-sim2real)
