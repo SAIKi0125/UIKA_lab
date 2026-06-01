@@ -2,15 +2,22 @@ from dataclasses import MISSING
 
 from isaaclab.utils import configclass
 
-from .commands import UniformLevelVelocityCommand
+from .commands import UniformLevelVelocityCommand, UniformThresholdVelocityCommand
 
 from isaaclab.envs.mdp import UniformVelocityCommandCfg
 
+
+@configclass
+class UniformThresholdVelocityCommandCfg(UniformVelocityCommandCfg):
+
+    class_type: type = UniformThresholdVelocityCommand
+
+
 @configclass
 class UniformLevelVelocityCommandCfg(UniformVelocityCommandCfg):
-    
+
     class_type: type = UniformLevelVelocityCommand
-    
+
     curriculums_limit_ranges: tuple[float, float] = MISSING
     
     low_vel_env_lin_x_ranges: tuple[float, float] = MISSING

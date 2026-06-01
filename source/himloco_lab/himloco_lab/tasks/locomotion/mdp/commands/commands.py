@@ -11,7 +11,70 @@ from isaaclab.envs.mdp import UniformVelocityCommand
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
-    from .commands_cfg import UniformLevelVelocityCommandCfg
+    from .commands_cfg import UniformLevelVelocityCommandCfg, UniformThresholdVelocityCommandCfg
+
+
+def _is_robot_on_terrain(env: ManagerBasedEnv, terrain_name: str, asset_name: str = "robot") -> torch.Tensor:
+    terrain = getattr(env.scene, "terrain", None)
+    if terrain is None or not hasattr(terrain, "terrain_types"):
+        return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+    if terrain.cfg.terrain_type != "generator" or terrain.cfg.terrain_generator is None:
+        return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+    if terrain.cfg.terrain_generator.sub_terrains is None:
+        return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+    if terrain_name not in terrain.cfg.terrain_generator.sub_terrains:
+        return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+    terrain_cfg = terrain.cfg.terrain_generator
+    sub_terrain_names = list(terrain_cfg.sub_terrains.keys())
+    proportions = torch.tensor([sub_cfg.proportion for sub_cfg in terrain_cfg.sub_terrains.values()], device=env.device)
+    proportions = proportions / proportions.sum()
+    cumsum_props = torch.cumsum(proportions, dim=0)
+
+    terrain_idx = sub_terrain_names.index(terrain_name)
+    col_start = round((0.0 if terrain_idx == 0 else cumsum_props[terrain_idx - 1].item()) * terrain_cfg.num_cols)
+    col_end = round(cumsum_props[terrain_idx].item() * terrain_cfg.num_cols)
+
+    asset = env.scene[asset_name]
+    robot_pos_w = asset.data.root_pos_w[:, :2]
+    terrain_origins_2d = terrain.terrain_origins[:, :, :2].reshape(-1, 2)
+    closest_flat_idx = torch.argmin(torch.cdist(robot_pos_w, terrain_origins_2d), dim=1)
+    col_idx = closest_flat_idx % terrain.terrain_origins.shape[1]
+    return (col_idx >= col_start) & (col_idx < col_end)
+
+
+class UniformThresholdVelocityCommand(UniformVelocityCommand):
+    """RobotLab-style uniform velocity command with small planar commands thresholded to zero."""
+
+    cfg: UniformThresholdVelocityCommandCfg
+
+    def __init__(self, cfg: UniformThresholdVelocityCommandCfg, env: ManagerBasedEnv):
+        super().__init__(cfg, env)
+        self.was_on_pit = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+
+    def _resample_command(self, env_ids: Sequence[int]):
+        super()._resample_command(env_ids)
+        self.vel_command_b[env_ids, :2] *= (torch.norm(self.vel_command_b[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
+
+    def _update_command(self):
+        super()._update_command()
+
+        on_pits = _is_robot_on_terrain(self._env, "pits")
+        left_pit_mask = self.was_on_pit & ~on_pits
+        if left_pit_mask.any():
+            self._resample_command(torch.where(left_pit_mask)[0])
+
+        if on_pits.any():
+            pit_env_ids = torch.where(on_pits)[0]
+            self.vel_command_b[pit_env_ids, 0] = torch.clamp(
+                torch.abs(self.vel_command_b[pit_env_ids, 0]), min=0.3, max=0.6
+            )
+            self.vel_command_b[pit_env_ids, 1] = 0.0
+            self.vel_command_b[pit_env_ids, 2] = 0.0
+            if self.cfg.heading_command:
+                self.heading_target[pit_env_ids] = 0.0
+
+        self.was_on_pit = on_pits
 
 
 

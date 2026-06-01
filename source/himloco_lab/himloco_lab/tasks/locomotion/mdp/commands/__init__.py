@@ -1,2 +1,2 @@
-from .commands import UniformLevelVelocityCommand
-from .commands_cfg import UniformLevelVelocityCommandCfg
+from .commands import UniformLevelVelocityCommand, UniformThresholdVelocityCommand
+from .commands_cfg import UniformLevelVelocityCommandCfg, UniformThresholdVelocityCommandCfg

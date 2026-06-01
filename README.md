@@ -1,207 +1,143 @@
-# HimLoco Lab
+# UIKA Lab
 
-## Project Overview
+UIKA Lab 是华东理工大学 Robocon 无贰战队参加仿生足式比赛的代码仓库。仓库基于 Isaac Lab 搭建 UIKA 四足机器人强化学习训练、策略导出、仿真验证与 Sim2Real 部署流程。
 
-This project ports **HimLoco** from **IsaacGym** to **Isaac Lab**.
+## 项目说明
 
-HimLoco is a reinforcement learning-based quadruped robot gait controller with a dual-network architecture. Through this project, you can train, export, and deploy HimLoco policies in the Isaac Lab environment.
+本项目面向 UIKA 仿生足式机器人，主要包含：
 
-## Project Structure
+- UIKA 机器人 URDF、网格资源与 Isaac Lab articulation 配置
+- 基于 HimLoco 思路的强化学习网络结构与训练流程
+- 参考 RobotLab 的速度跟踪、稳定性、能耗与动作平滑等奖励项设计
+- 面向仿生足式比赛场景的平地、坡面、台阶、离散障碍等地形训练配置
+- 策略导出、Sim2Sim 验证与基于 rl_sar 的 Sim2Real 部署流程
+- 使用 PACE 参数辨识方法进行机器人模型与控制参数校准
 
-```
+## 技术路线
+
+### 训练框架
+
+训练环境使用 Isaac Lab，强化学习算法实现保留 HimLoco 的双网络结构思想，将运动策略与隐变量估计结合，用于提升机器人在模型误差、地形变化和接触扰动下的鲁棒性。
+
+### 奖励设计
+
+奖励函数参考 RobotLab 的腿式运动任务设计，围绕以下目标进行约束：
+
+- 跟踪线速度与角速度指令
+- 保持机体姿态、足端接触节律和运动稳定性
+- 抑制关节力矩、关节速度、动作变化率等高能耗或高冲击行为
+- 提升复杂地形下的通过能力与比赛任务适应性
+
+### Sim2Real
+
+Sim2Real 部署使用 rl_sar 作为策略运行和实机控制框架。部署前先在 MuJoCo 中完成 Sim2Sim 验证，再结合 PACE 参数辨识结果修正质量、质心、惯量、关节阻尼、PD 参数等关键参数，降低训练仿真与实机之间的差异。
+
+## 仓库结构
+
+```text
 himloco_lab/
-├── scripts/                          # Script files
+├── scripts/
 │   ├── himloco_rsl_rl/
-│   │   ├── train.py                  # Training script
-│   │   ├── play.py                   # Batch inference and policy export
-│   │   ├── play_interactive.py       # Interactive control script
-│   │   └── cli_args.py               
-│   ├── list_envs.py                  # List available environments
-│   ├── zero_agent.py                 
-│   └── random_agent.py               
-│
-├── source/himloco_lab/               # Main source code
-│   └── himloco_lab/
-│       ├── tasks/                    # Task definitions
-│       │   └── locomotion/
-│       │       ├── mdp/              # Observations, actions, rewards, terminations
-│       │       └── robots/go2/       # Training configuration
-│       │
-│       ├── rsl_rl/                   # HimLoco algorithm implementation
-│       │   ├── config/               # Algorithm configuration
-│       │   ├── modules/              # HIMActorCritic, HIMEstimator networks
-│       │   ├── algorithms/           # HIMOnPolicyRunner training logic
-│       │   ├── wrappers/             # HimlocoVecEnvWrapper environment adapter for IsaacLab
-│       │   └── env/                  # VecEnv interface
-│       │
-│       ├── utils/                    # Utility functions
-│       │   └── export_policy.py      # JIT and ONNX export tools
-│       │
-│       └── assets/                   # Asset files
-│           └── unitree/              # Unitree Go2 URDF and configuration
-│
-├── deploy/                           # Robot deployment code
-│   └── robots/go2/                   # Go2 controller implementation
-│
-└── README.md                         # This file
+│   │   ├── train.py                 # 训练入口
+│   │   ├── play.py                  # 推理、回放与策略导出
+│   │   └── play_interactive.py      # 键盘交互控制
+│   └── list_envs.py                 # 查看已注册环境
+├── source/himloco_lab/himloco_lab/
+│   ├── assets/
+│   │   ├── uika.py                  # UIKA articulation 配置
+│   │   └── uika/                    # UIKA URDF 与 mesh 资源
+│   ├── rsl_rl/                      # HimLoco 风格 RL 算法实现
+│   ├── terrains/                    # 自定义地形配置
+│   └── tasks/locomotion/
+│       ├── agents/                  # PPO / HimLoco runner 配置
+│       ├── mdp/                     # 观测、命令、奖励、事件、终止项
+│       └── robots/uika/             # UIKA 训练与播放环境
+├── deploy/                          # 部署相关代码与第三方依赖
+└── docs/                            # 项目文档
 ```
 
-## Algorithm Overview
-[HimLoco](https://github.com/InternRobotics/HIMLoco/blob/main/projects/himloco/README.md)
-![HimLoco](https://github.com/InternRobotics/HIMLoco/blob/main/assets/overview.jpeg)
+## 环境安装
 
-## 📚 Installation Guide
+### 1. 安装 Isaac Lab
 
-### 1. Install Isaac Lab
+请先按照 Isaac Lab 官方文档安装 Isaac Sim 与 Isaac Lab，并确认当前 Python 环境可以正常运行 Isaac Lab。
 
-Follow the [official installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/pip_installation.html) to install Isaac Lab.
-We recommend using the pip installation method.
-
-### 2. Clone This Repository
-
-Clone this repository into a separate directory outside of Isaac Lab:
+### 2. 克隆仓库
 
 ```bash
-git clone https://github.com/IsaacZH/himloco_lab.git
-cd himloco_lab
+git clone https://github.com/SAIKi0125/UIKA_lab.git
+cd UIKA_lab
 ```
 
-### 3. Install HimLoco Lab
+### 3. 安装本项目
 
 ```bash
 python -m pip install -e source/himloco_lab
 ```
-### 4. Download unitree robot description files
 
-  *Method 1: Using USD Files*
-  - Download unitree usd files from [unitree_model](https://huggingface.co/datasets/unitreerobotics/unitree_model/tree/main), keeping folder structure
-    ```bash
-    git clone https://huggingface.co/datasets/unitreerobotics/unitree_model
-    ```
-  - Config `UNITREE_MODEL_DIR` in `source/himloco_lab/himloco_lab/assets/robots/unitree.py`.
-
-    ```bash
-    UNITREE_MODEL_DIR = "</home/user/projects/unitree_usd>"
-    ```
-
-  *Method 2: Using URDF Files [Recommended]* Only for Isaacsim >= 5.0
-  -  Download unitree robot urdf files from [unitree_ros](https://github.com/unitreerobotics/unitree_ros)
-      ```
-      git clone https://github.com/unitreerobotics/unitree_ros.git
-      ```
-  - Config `UNITREE_ROS_DIR` in `source/himloco_lab/himloco_lab/assets/robots/unitree.py`.
-    ```bash
-    UNITREE_ROS_DIR = "</home/user/projects/unitree_ros/unitree_ros>"
-    ```
-  - [Optional]: change *robot_cfg.spawn* if you want to use urdf/usd files
-
-## Quick Start
-
-### Train Policy
-
-Train a HimLoco policy on Unitree Go2:
+### 4. 查看环境注册情况
 
 ```bash
-python scripts/himloco_rsl_rl/train.py --task Unitree-Go2-Velocity --headless
+python scripts/list_envs.py
 ```
 
-### Inference and Playback
+确认列表中包含：
 
-Run a trained policy for batch inference:
+- `UIKA-Velocity`
+- `UIKA-Velocity-Play`
+
+## 快速开始
+
+### 训练 UIKA 策略
 
 ```bash
-python scripts/himloco_rsl_rl/play.py --task Unitree-Go2-Velocity-Play
+python scripts/himloco_rsl_rl/train.py --task UIKA-Velocity --headless
 ```
 
-### Interactive Control
-
-Use keyboard to control the robot in real-time in IsaacLab:
+### 播放与导出策略
 
 ```bash
-# Launch interactive control
-python scripts/himloco_rsl_rl/play_interactive.py --task Unitree-Go2-Velocity-Play
-
-# Keyboard controls:
-#   Numpad 8 / ↑   : Move forward
-#   Numpad 2 / ↓   : Move backward
-#   Numpad 4 / ←   : Strafe right
-#   Numpad 6 / →   : Strafe left
-#   Numpad 7 / Z   : Rotate counter-clockwise
-#   Numpad 9 / X   : Rotate clockwise
+python scripts/himloco_rsl_rl/play.py --task UIKA-Velocity-Play
 ```
 
-### Model Export
+导出结果会保存在训练日志目录中，常见文件包括：
 
-Export trained models for deployment:
+- `policy.pt`：TorchScript 策略文件
+- `encoder.onnx` 与 `policy.onnx`：ONNX 格式模型
+
+### 交互式控制
 
 ```bash
-python scripts/himloco_rsl_rl/play.py --task Unitree-Go2-Velocity-Play 
+python scripts/himloco_rsl_rl/play_interactive.py --task UIKA-Velocity-Play
 ```
 
-The script generates files in the log directory, including:
-- `policy.pt` - TorchScript JIT model (single file deployment)
-- `encoder.onnx` & `policy.onnx` - ONNX format (separate models)
+## UIKA 训练配置
 
-## Deployment Guide
+UIKA 的主要训练配置位于：
 
-After model training, you need to verify the trained policy in Mujoco (Sim2Sim) to test model performance.
-Only then can you proceed to real robot deployment (Sim2Real).
+- `source/himloco_lab/himloco_lab/assets/uika.py`
+- `source/himloco_lab/himloco_lab/tasks/locomotion/robots/uika/velocity_env_cfg.py`
+- `source/himloco_lab/himloco_lab/tasks/locomotion/agents/himloco_rsl_rl_cfg.py`
 
-### Environment Setup
+地形配置默认提供平地训练模式，也保留了坡面、台阶、障碍等复杂地形配置，可在 `velocity_env_cfg.py` 中切换。
 
-```bash
-# Install dependencies
-sudo apt install -y libyaml-cpp-dev libboost-all-dev libeigen3-dev libspdlog-dev libfmt-dev
+## 部署流程
 
-# Install unitree_sdk2
-git clone git@github.com:unitreerobotics/unitree_sdk2.git
-cd unitree_sdk2
-mkdir build && cd build
-cmake .. -DBUILD_EXAMPLES=OFF # Install to /usr/local directory
-sudo make install
-# Compile the robot_controller
-cd himloco_lab/deploy/robots/go2 
-mkdir build && cd build
-cmake .. && make
-```
+推荐部署流程：
 
-### Sim2Sim
+1. 在 Isaac Lab 中完成策略训练。
+2. 导出 `policy.pt` 或 ONNX 模型。
+3. 将策略和 UIKA 模型配置同步到 rl_sar。
+4. 在 MuJoCo 中完成 Sim2Sim 验证。
+5. 根据 PACE 参数辨识结果修正模型参数和控制参数。
+6. 在低速、限幅、有人保护条件下进行实机 Sim2Real 测试。
 
-Install [unitree_mujoco](https://github.com/unitreerobotics/unitree_mujoco?tab=readme-ov-file#installation).
+实机部署前必须确认急停、限位、关节方向、关节顺序、默认站立角、PD 参数、动作缩放、观测归一化和历史帧顺序均与训练配置一致。
 
-- Set the `robot` at `/simulate/config.yaml` to go2
-- Set `domain_id` to 0
-- Set `enable_elastic_hand` to 1
-- Set `use_joystck` to 1.
-
-Launch Mujoco simulation environment:
-```bash
-cd unitree_mujoco/simulate/build
-./unitree_mujoco
-```
-
-Launch the controller:
-
-```bash
-cd himloco_lab/deploy/robots/go2/build
-./go2_ctrl
-```
-
-### Sim2Real
-
-You can use this program to directly control the real robot, but make sure the robot's motion controller is disabled.
-
-```bash
-./go2_ctrl --network eth0 # eth0 is the network interface name.
-```
-
-## 📝 TODO List
-- \[x\] deploy on real robot and mujoco
-- \[x\] deploy on jetson
-- \[ \] migrate to latest rsl_rl version
-
-## 🔗 References
+## 参考项目
 
 - [HimLoco](https://github.com/RoboLoco/HimLoco)
 - [Isaac Lab](https://isaac-sim.github.io/IsaacLab/)
-- [unitree_rl_lab](https://github.com/unitreerobotics/unitree_rl_lab)
+- [RobotLab](https://github.com/fan-ziqi/robot_lab)
+- [rl_sar](https://github.com/fan-ziqi/rl_sar)
+- PACE 参数辨识方法

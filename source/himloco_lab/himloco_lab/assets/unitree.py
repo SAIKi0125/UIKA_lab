@@ -19,7 +19,7 @@ from isaaclab.utils import configclass
 from himloco_lab.assets import unitree_actuators
 
 UNITREE_MODEL_DIR = "path/to/unitree_model"  # Replace with the actual path to your unitree_model directory
-UNITREE_ROS_DIR = "path/to/unitree_ros"  # Replace with the actual path to your unitree_ros package
+UNITREE_ROS_DIR = "/tmp/unitree_ros"  # Replace with the actual path to your unitree_ros package
 
 @configclass
 class UnitreeArticulationCfg(ArticulationCfg):
@@ -50,6 +50,7 @@ class UnitreeUsdFileCfg(sim_utils.UsdFileCfg):
 @configclass
 class UnitreeUrdfFileCfg(sim_utils.UrdfFileCfg):
     fix_base: bool = False
+    merge_fixed_joints: bool = False
     activate_contact_sensors: bool = True
     replace_cylinders_with_capsules = True
     joint_drive = sim_utils.UrdfConverterCfg.JointDriveCfg(

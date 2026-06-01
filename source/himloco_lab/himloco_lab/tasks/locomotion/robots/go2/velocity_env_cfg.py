@@ -230,7 +230,7 @@ class CommandsCfg:
         debug_vis=True,
         heading_command=True,
         ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
-            lin_vel_x=(-1, 1), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-2.0, 2.0), heading=(-math.pi, math.pi)
+            lin_vel_x=(-2, 2), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
         ),
         heading_control_stiffness=0.5,
         curriculums_limit_ranges=(-2, 2),
