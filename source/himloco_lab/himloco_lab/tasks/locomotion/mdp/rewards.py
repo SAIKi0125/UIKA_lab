@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-import torch
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
+
+import torch
 
 import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation, RigidObject
@@ -94,12 +96,24 @@ def lin_vel_z_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntity
     return reward
 
 
+def source_lin_vel_z_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Source Parkour z-axis base velocity penalty without target-side upright gating."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    return torch.square(asset.data.root_lin_vel_b[:, 2])
+
+
 def ang_vel_xy_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Penalize xy-axis base angular velocity using L2 squared kernel."""
     asset: RigidObject = env.scene[asset_cfg.name]
     reward = torch.sum(torch.square(asset.data.root_ang_vel_b[:, :2]), dim=1)
     reward *= _upright_gate(env)
     return reward
+
+
+def source_ang_vel_xy_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Source Parkour xy-axis angular velocity penalty without target-side upright gating."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    return torch.sum(torch.square(asset.data.root_ang_vel_b[:, :2]), dim=1)
 
 
 def flat_orientation_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
@@ -132,6 +146,28 @@ def track_ang_vel_z_exp(
     ang_vel_error = torch.square(env.command_manager.get_command(command_name)[:, 2] - asset.data.root_ang_vel_b[:, 2])
     reward = torch.exp(-ang_vel_error / std**2)
     reward *= _upright_gate(env)
+    return reward
+
+
+def track_goal_vel_from_command(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward velocity projected onto the current waypoint command direction.
+
+    The source Parkour task projects world velocity onto parkour-manager target direction.
+    Here the waypoint command already encodes that target direction as a body-frame velocity
+    command, so this term uses the command vector directly and keeps the same min(v, cmd)/cmd
+    saturation semantics.
+    """
+    asset: RigidObject = env.scene[asset_cfg.name]
+    command_xy = env.command_manager.get_command(command_name)[:, :2]
+    command_speed = torch.linalg.norm(command_xy, dim=1)
+    command_dir_b = command_xy / torch.clamp(command_speed.unsqueeze(1), min=1e-5)
+    proj_vel = torch.sum(command_dir_b * asset.data.root_lin_vel_b[:, :2], dim=1)
+    reward = torch.minimum(proj_vel, command_speed) / torch.clamp(command_speed, min=1e-5)
+    reward *= command_speed > 1e-5
     return reward
 
 
@@ -182,9 +218,104 @@ def joint_pos_penalty(
     reward *= _upright_gate(env)
     return reward
 
+
+def joint_dof_error_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Penalize squared joint position deviation from default posture."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    joint_ids = asset_cfg.joint_ids if asset_cfg.joint_ids is not None else slice(None)
+    reward = torch.sum(
+        torch.square(asset.data.joint_pos[:, joint_ids] - asset.data.default_joint_pos[:, joint_ids]), dim=1
+    )
+    return reward
+
+
+def hip_pos_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """Penalize squared deviation of selected hip joints from default posture."""
+    return joint_dof_error_l2(env, asset_cfg=asset_cfg)
+
+
 def smoothness(env: HimlocoManagerBasedRLEnv) -> torch.Tensor:
     """Penalize the rate of change of the actions using L2 squared kernel."""
-    return torch.sum(torch.square(env.action_manager.action - env.action_manager.prev_action*2 + env.pre_pre_action), dim=1)
+    return torch.sum(
+        torch.square(env.action_manager.action - env.action_manager.prev_action * 2 + env.pre_pre_action), dim=1
+    )
+
+
+class ActionRateNorm(ManagerTermBase):
+    """Source-style action-rate penalty using L2 norm of raw action deltas."""
+
+    def __init__(self, cfg: RewTerm, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        self.action_term_name = cfg.params.get("action_term_name")
+        self.previous_actions = torch.zeros_like(self._current_actions(env))
+
+    def reset(self, env_ids: Sequence[int] | None = None) -> None:
+        if env_ids is None:
+            self.previous_actions[:] = 0.0
+        else:
+            self.previous_actions[env_ids] = 0.0
+
+    def __call__(
+        self,
+        env: ManagerBasedRLEnv,
+        asset_cfg: SceneEntityCfg,
+        action_term_name: str | None = None,
+    ) -> torch.Tensor:
+        actions = self._current_actions(env, action_term_name=action_term_name)
+        reward = torch.linalg.norm(actions - self.previous_actions, dim=1)
+        self.previous_actions = actions.clone()
+        return reward
+
+    def _current_actions(self, env: ManagerBasedRLEnv, action_term_name: str | None = None) -> torch.Tensor:
+        action_term_name = action_term_name or self.action_term_name
+        if action_term_name is not None:
+            try:
+                return env.action_manager.get_term(action_term_name).raw_actions
+            except Exception:
+                pass
+        return env.action_manager.action
+
+
+class JointDofAccL2(ManagerTermBase):
+    """Source-style finite-difference joint acceleration penalty."""
+
+    def __init__(self, cfg: RewTerm, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        self.asset: Articulation = env.scene[cfg.params["asset_cfg"].name]
+        self.previous_joint_vel = torch.zeros_like(self.asset.data.joint_vel)
+
+    def reset(self, env_ids: Sequence[int] | None = None) -> None:
+        if env_ids is None:
+            self.previous_joint_vel[:] = 0.0
+        else:
+            self.previous_joint_vel[env_ids] = 0.0
+
+    def __call__(self, env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+        joint_vel = self.asset.data.joint_vel
+        reward = torch.sum(torch.square((joint_vel - self.previous_joint_vel) / env.step_dt), dim=1)
+        self.previous_joint_vel = joint_vel.clone()
+        return reward
+
+
+class DeltaTorquesL2(ManagerTermBase):
+    """Source-style penalty on step-to-step applied torque changes."""
+
+    def __init__(self, cfg: RewTerm, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        self.asset: Articulation = env.scene[cfg.params["asset_cfg"].name]
+        self.previous_torque = torch.zeros_like(self.asset.data.applied_torque)
+
+    def reset(self, env_ids: Sequence[int] | None = None) -> None:
+        if env_ids is None:
+            self.previous_torque[:] = 0.0
+        else:
+            self.previous_torque[env_ids] = 0.0
+
+    def __call__(self, env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+        torque = self.asset.data.applied_torque
+        reward = torch.sum(torch.square(torque - self.previous_torque), dim=1)
+        self.previous_torque = torque.clone()
+        return reward
 
 """
 Feet rewards.
@@ -529,6 +660,13 @@ def undesired_contacts(env: ManagerBasedRLEnv, threshold: float, sensor_cfg: Sce
     reward = torch.sum(is_contact, dim=1).float()
     reward *= _upright_gate(env)
     return reward
+
+
+def collision_contacts(env: ManagerBasedRLEnv, threshold: float, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
+    """Source Parkour collision penalty: count current-frame contacts above threshold."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    net_contact_forces = contact_sensor.data.net_forces_w_history[:, 0, sensor_cfg.body_ids]
+    return torch.sum((torch.norm(net_contact_forces, dim=-1) > threshold).float(), dim=1)
 
 
 def feet_slide(

@@ -674,6 +674,46 @@ class RewardsCfg:
 class ParkourRewardsCfg(RewardsCfg):
     """Reward terms used by the imported Extreme Parkour terrain task."""
 
+    # Disable baseline velocity-task rewards that over-constrain parkour motions.
+    is_terminated = None
+    lin_vel_z_l2 = None
+    ang_vel_xy_l2 = None
+    flat_orientation_l2 = None
+    base_height_l2 = None
+    body_lin_acc_l2 = None
+    upward = None
+    joint_torques_l2 = None
+    joint_power = None
+    joint_vel_l2 = None
+    joint_acc_l2 = None
+    joint_pos_limits = None
+    joint_vel_limits = None
+    stand_still = None
+    joint_pos_penalty = None
+    joint_mirror = None
+    action_rate_l2 = None
+    undesired_contacts = None
+    contact_forces = None
+    track_lin_vel_xy = None
+    track_ang_vel_z = None
+    feet_air_time = None
+    feet_air_time_variance = None
+    feet_contact = None
+    feet_contact_without_cmd = None
+    feet_slide = None
+    feet_height = None
+    feet_height_body = None
+    feet_gait = None
+
+    reward_collision = RewTerm(
+        func=mdp.collision_contacts,
+        weight=-10.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["base", ".*_calf", ".*_thigh"]),
+            "threshold": 0.1,
+        },
+    )
+
     feet_edge = RewTerm(
         func=mdp.feet_edge,
         weight=-1.0,
@@ -689,6 +729,56 @@ class ParkourRewardsCfg(RewardsCfg):
             "contact_threshold": 1.0,
             "terrain_level_threshold": None,
         },
+    )
+
+    reward_torques = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-5)
+    reward_dof_error = RewTerm(
+        func=mdp.joint_dof_error_l2,
+        weight=-0.04,
+        params={"asset_cfg": SceneEntityCfg("robot")},
+    )
+    reward_hip_pos = RewTerm(
+        func=mdp.hip_pos_l2,
+        weight=-0.5,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=".*_hip_joint")},
+    )
+    reward_ang_vel_xy = RewTerm(func=mdp.source_ang_vel_xy_l2, weight=-0.05)
+    reward_action_rate = RewTerm(
+        func=mdp.ActionRateNorm,
+        weight=-0.1,
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "action_term_name": "JointPositionAction",
+        },
+    )
+    reward_dof_acc = RewTerm(
+        func=mdp.JointDofAccL2,
+        weight=-2.5e-7,
+        params={"asset_cfg": SceneEntityCfg("robot")},
+    )
+    reward_lin_vel_z = RewTerm(func=mdp.source_lin_vel_z_l2, weight=-0.5)
+    feet_stumble = RewTerm(
+        func=mdp.feet_stumble,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
+    )
+    reward_tracking_goal_vel = RewTerm(
+        func=mdp.track_goal_vel_from_command,
+        weight=1.5,
+        params={
+            "command_name": "base_velocity",
+            "asset_cfg": SceneEntityCfg("robot"),
+        },
+    )
+    reward_tracking_yaw = RewTerm(
+        func=mdp.track_ang_vel_z_exp,
+        weight=0.5,
+        params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
+    )
+    reward_delta_torques = RewTerm(
+        func=mdp.DeltaTorquesL2,
+        weight=-1.0e-7,
+        params={"asset_cfg": SceneEntityCfg("robot")},
     )
 
 
