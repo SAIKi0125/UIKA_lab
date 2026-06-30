@@ -202,6 +202,123 @@ def feet_stumble(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg) -> torch.Te
     return reward
 
 
+def _edge_mask_tensor(
+    env: ManagerBasedRLEnv,
+    edge_masks: dict[str, object],
+    terrain_names: tuple[str, ...],
+) -> torch.Tensor:
+    cached = getattr(env, "_feet_edge_mask_cache", None)
+    if cached is not None and cached["source"] is edge_masks and cached["terrain_names"] == terrain_names:
+        return cached["masks"]
+
+    first_mask = next(iter(edge_masks.values()))
+    default_mask = torch.zeros(first_mask.shape, dtype=torch.bool, device=env.device)
+    masks = []
+    for terrain_name in terrain_names:
+        mask = edge_masks.get(terrain_name)
+        if mask is None:
+            masks.append(default_mask)
+        else:
+            masks.append(torch.as_tensor(mask, dtype=torch.bool, device=env.device))
+    mask_tensor = torch.stack(masks, dim=0)
+    env._feet_edge_mask_cache = {"source": edge_masks, "terrain_names": terrain_names, "masks": mask_tensor}
+    return mask_tensor
+
+
+def _terrain_route_ids_from_env_origins(
+    env: ManagerBasedRLEnv,
+    terrain_names: tuple[str, ...],
+) -> torch.Tensor:
+    terrain = getattr(env.scene, "terrain", None)
+    if terrain is None or not hasattr(terrain, "terrain_origins") or not hasattr(env.scene, "env_origins"):
+        return torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
+
+    terrain_origins = terrain.terrain_origins
+    terrain_origins_2d = terrain_origins[:, :, :2].reshape(-1, 2).to(env.device)
+    env_origins = env.scene.env_origins[:, :2].to(env.device)
+    closest_flat_idx = torch.argmin(torch.cdist(env_origins, terrain_origins_2d), dim=1)
+    col_idx = closest_flat_idx % terrain_origins.shape[1]
+
+    terrain_cfg = getattr(getattr(terrain, "cfg", None), "terrain_generator", None)
+    num_cols = int(getattr(terrain_cfg, "num_cols", int(col_idx.max().item()) + 1))
+    if terrain_cfg is None or terrain_cfg.sub_terrains is None:
+        return torch.clamp(col_idx, min=0, max=len(terrain_names) - 1).to(torch.long)
+
+    sub_terrain_names = list(terrain_cfg.sub_terrains.keys())
+    route_name_to_id = {name: route_id for route_id, name in enumerate(terrain_names)}
+    column_to_route = torch.zeros(num_cols, dtype=torch.long, device=env.device)
+    proportions = torch.tensor(
+        [sub_cfg.proportion for sub_cfg in terrain_cfg.sub_terrains.values()],
+        dtype=torch.float,
+        device=env.device,
+    )
+    proportions = proportions / torch.clamp(proportions.sum(), min=1e-6)
+    cumsum_props = torch.cumsum(proportions, dim=0)
+
+    col_start = 0
+    for terrain_id, terrain_name in enumerate(sub_terrain_names):
+        col_end = round(cumsum_props[terrain_id].item() * num_cols)
+        col_end = max(col_start, min(num_cols, col_end))
+        column_to_route[col_start:col_end] = route_name_to_id.get(terrain_name, 0)
+        col_start = col_end
+
+    return column_to_route[torch.clamp(col_idx, min=0, max=num_cols - 1)]
+
+
+def feet_edge(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg,
+    terrain_names: tuple[str, ...],
+    tile_size: tuple[float, float],
+    horizontal_scale: float,
+    edge_masks: dict[str, object] | None = None,
+    vertical_scale: float = 0.005,
+    height_threshold: float = 0.05,
+    edge_width: float = 0.05,
+    contact_threshold: float = 1.0,
+    terrain_level_threshold: int | None = None,
+) -> torch.Tensor:
+    """Penalize feet that contact cells marked as terrain edges."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    asset: RigidObject = env.scene[asset_cfg.name]
+    if edge_masks is None:
+        from himloco_lab.terrains.extreme_parkour import build_extreme_parkour_edge_masks
+
+        edge_masks = build_extreme_parkour_edge_masks(
+            tile_size=tile_size,
+            horizontal_scale=horizontal_scale,
+            vertical_scale=vertical_scale,
+            height_threshold=height_threshold,
+            edge_width=edge_width,
+        )
+    mask_tensor = _edge_mask_tensor(env, edge_masks, terrain_names)
+    route_ids = _terrain_route_ids_from_env_origins(env, terrain_names)
+
+    contacts = (
+        contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0]
+        > contact_threshold
+    )
+    tile_half = torch.tensor(tile_size, dtype=torch.float, device=env.device)[:2] * 0.5
+    foot_pos_local = asset.data.body_pos_w[:, asset_cfg.body_ids, :2] - env.scene.env_origins[:, None, :2] + tile_half
+    foot_pos_px = torch.round(foot_pos_local / horizontal_scale).to(torch.long)
+    foot_pos_px[..., 0] = torch.clamp(foot_pos_px[..., 0], 0, mask_tensor.shape[1] - 1)
+    foot_pos_px[..., 1] = torch.clamp(foot_pos_px[..., 1], 0, mask_tensor.shape[2] - 1)
+
+    env_ids = torch.arange(env.num_envs, device=env.device).unsqueeze(1)
+    feet_at_edge = mask_tensor[route_ids[env_ids], foot_pos_px[..., 0], foot_pos_px[..., 1]]
+    reward = torch.sum((contacts & feet_at_edge).float(), dim=1)
+
+    if terrain_level_threshold is not None:
+        terrain = getattr(env.scene, "terrain", None)
+        terrain_levels = getattr(terrain, "terrain_levels", None)
+        if terrain_levels is not None:
+            reward *= terrain_levels.to(env.device) > terrain_level_threshold
+
+    reward *= _upright_gate(env)
+    return reward
+
+
 def feet_height_body(
     env: ManagerBasedRLEnv,
     command_name: str,

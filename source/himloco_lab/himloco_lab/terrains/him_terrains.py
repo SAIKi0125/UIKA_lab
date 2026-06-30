@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 
 from isaaclab.terrains.height_field.utils import height_field_to_mesh
 
+from .extreme_parkour import load_named_extreme_parkour_heightmap
+
 if TYPE_CHECKING:
     from . import him_terrains_cfg
 
@@ -162,4 +164,25 @@ def hf_discrete_obstacles_terrain(
     y2 = (length_pixels + platform_size) // 2
     height_field[x1:x2, y1:y2] = 0
     
+    return height_field
+
+
+@height_field_to_mesh
+def hf_extreme_parkour_heightmap_terrain(
+    difficulty: float,
+    cfg: him_terrains_cfg.HfExtremeParkourHeightmapTerrainCfg,
+) -> np.ndarray:
+    """Load one Extreme Parkour heightmap as an Isaac Lab height-field terrain."""
+    del difficulty
+    target_shape = (
+        max(1, int(cfg.size[0] / cfg.horizontal_scale)),
+        max(1, int(cfg.size[1] / cfg.horizontal_scale)),
+    )
+    height_field, _ = load_named_extreme_parkour_heightmap(
+        cfg.terrain_name,
+        target_shape=target_shape,
+        horizontal_scale=cfg.horizontal_scale,
+        vertical_scale=cfg.vertical_scale,
+        heightmap_path=cfg.heightmap_path,
+    )
     return height_field

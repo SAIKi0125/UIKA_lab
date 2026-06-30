@@ -21,6 +21,12 @@ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 from himloco_lab.assets.uika import UIKA_CFG as ROBOT_CFG
 from himloco_lab.tasks.locomotion import mdp
 import himloco_lab.terrains as him_terrains
+from himloco_lab.terrains.extreme_parkour import (
+    build_extreme_parkour_marker_routes,
+    build_extreme_parkour_routes,
+    build_flat_parkour_marker_route,
+    build_flat_parkour_route,
+)
 
 UIKA_JOINT_NAMES = list(ROBOT_CFG.joint_sdk_names)
 
@@ -80,30 +86,60 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
     },
 )
 
+PARKOUR_TILE_SIZE = (8.0, 8.0)
+PARKOUR_HORIZONTAL_SCALE = 0.05
+EXTREME_PARKOUR_HEIGHTMAP_TERRAIN_NAMES = ("T_step_stl", "Slope", "BridgeA", "BridgeB")
+FLAT_PARKOUR_TERRAIN_NAME = "Flat"
+EXTREME_PARKOUR_TERRAIN_NAMES = EXTREME_PARKOUR_HEIGHTMAP_TERRAIN_NAMES + (FLAT_PARKOUR_TERRAIN_NAME,)
+EXTREME_PARKOUR_ROUTES = build_extreme_parkour_routes(
+    tile_size=PARKOUR_TILE_SIZE,
+    horizontal_scale=PARKOUR_HORIZONTAL_SCALE,
+    vertical_scale=0.005,
+)
+EXTREME_PARKOUR_ROUTES[FLAT_PARKOUR_TERRAIN_NAME] = build_flat_parkour_route(tile_size=PARKOUR_TILE_SIZE)
+EXTREME_PARKOUR_MARKER_ROUTES = build_extreme_parkour_marker_routes(
+    tile_size=PARKOUR_TILE_SIZE,
+    horizontal_scale=PARKOUR_HORIZONTAL_SCALE,
+    vertical_scale=0.005,
+)
+EXTREME_PARKOUR_MARKER_ROUTES[FLAT_PARKOUR_TERRAIN_NAME] = build_flat_parkour_marker_route(
+    EXTREME_PARKOUR_ROUTES[FLAT_PARKOUR_TERRAIN_NAME]
+)
+
+EXTREME_PARKOUR_CFG = terrain_gen.TerrainGeneratorCfg(
+    size=PARKOUR_TILE_SIZE,
+    border_width=25.0,
+    num_rows=10,
+    num_cols=18,
+    horizontal_scale=PARKOUR_HORIZONTAL_SCALE,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    difficulty_range=(0.0, 1.0),
+    use_cache=True,
+    sub_terrains={
+        name: him_terrains.HfExtremeParkourHeightmapTerrainCfg(
+            proportion=1.0,
+            border_width=0.0,
+            terrain_name=name,
+        )
+        for name in EXTREME_PARKOUR_HEIGHTMAP_TERRAIN_NAMES
+    }
+    | {
+        FLAT_PARKOUR_TERRAIN_NAME: terrain_gen.MeshPlaneTerrainCfg(
+            proportion=0.5,
+        )
+    },
+)
+
 
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
     """Configuration for the terrain scene with UIKA robot."""
 
-    # --- 平地模式 ---
-    terrain = TerrainImporterCfg(
-        prim_path="/World/ground",
-        terrain_type="plane",
-        collision_group=-1,
-        physics_material=sim_utils.RigidBodyMaterialCfg(
-            friction_combine_mode="multiply",
-            restitution_combine_mode="multiply",
-            static_friction=1.0,
-            dynamic_friction=1.0,
-        ),
-        debug_vis=False,
-    )
-    # --- 地形模式（取消注释以启用） ---
+    # --- 平地模式（取消注释以启用） ---
     # terrain = TerrainImporterCfg(
     #     prim_path="/World/ground",
-    #     terrain_type="generator",
-    #     terrain_generator=COBBLESTONE_ROAD_CFG,
-    #     max_init_terrain_level=5,
+    #     terrain_type="plane",
     #     collision_group=-1,
     #     physics_material=sim_utils.RigidBodyMaterialCfg(
     #         friction_combine_mode="multiply",
@@ -111,13 +147,28 @@ class RobotSceneCfg(InteractiveSceneCfg):
     #         static_friction=1.0,
     #         dynamic_friction=1.0,
     #     ),
-    #     visual_material=sim_utils.MdlFileCfg(
-    #         mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
-    #         project_uvw=True,
-    #         texture_scale=(0.25, 0.25),
-    #     ),
     #     debug_vis=False,
     # )
+    # --- 地形模式 ---
+    terrain = TerrainImporterCfg(
+        prim_path="/World/ground",
+        terrain_type="generator",
+        terrain_generator=COBBLESTONE_ROAD_CFG,
+        max_init_terrain_level=5,
+        collision_group=-1,
+        physics_material=sim_utils.RigidBodyMaterialCfg(
+            friction_combine_mode="multiply",
+            restitution_combine_mode="multiply",
+            static_friction=1.0,
+            dynamic_friction=1.0,
+        ),
+        visual_material=sim_utils.MdlFileCfg(
+            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+            project_uvw=True,
+            texture_scale=(0.25, 0.25),
+        ),
+        debug_vis=False,
+    )
     robot: ArticulationCfg = ROBOT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     height_scanner = RayCasterCfg(
@@ -143,6 +194,31 @@ class RobotSceneCfg(InteractiveSceneCfg):
             intensity=750.0,
             texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
         ),
+    )
+
+
+@configclass
+class RobotParkourSceneCfg(RobotSceneCfg):
+    """Scene configuration using imported Extreme Parkour terrains."""
+
+    terrain = TerrainImporterCfg(
+        prim_path="/World/ground",
+        terrain_type="generator",
+        terrain_generator=EXTREME_PARKOUR_CFG,
+        max_init_terrain_level=5,
+        collision_group=-1,
+        physics_material=sim_utils.RigidBodyMaterialCfg(
+            friction_combine_mode="multiply",
+            restitution_combine_mode="multiply",
+            static_friction=1.0,
+            dynamic_friction=1.0,
+        ),
+        visual_material=sim_utils.MdlFileCfg(
+            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+            project_uvw=True,
+            texture_scale=(0.25, 0.25),
+        ),
+        debug_vis=False,
     )
 
 
@@ -212,32 +288,32 @@ class EventCfg:
         mode="reset",
         params={
             "pose_range": {
-                "x": (-0.5, 0.5),
-                "y": (-0.5, 0.5),
-                "z": (0.0, 0.2),
-                "roll": (-3.14, 3.14),
-                "pitch": (-3.14, 3.14),
-                "yaw": (-3.14, 3.14),
-                # "x": (-0.0, 0.0),
-                # "y": (-0.0, 0.0),
-                # "z": (0.0, 0.0),
-                # "roll": (-0.0, 0.0),
-                # "pitch": (-0.0, 0.0),
-                # "yaw": (-0.0, 0.0),
+                # "x": (-0.5, 0.5),
+                # "y": (-0.5, 0.5),
+                # "z": (0.0, 0.2),
+                # "roll": (-3.14, 3.14),
+                # "pitch": (-3.14, 3.14),
+                # "yaw": (-3.14, 3.14),
+                "x": (-3.5, -3.5),
+                "y": (-1.0, 1.0),
+                "z": (0.0, 0.0),
+                "roll": (-0.0, 0.0),
+                "pitch": (-0.0, 0.0),
+                "yaw": (-0.0, 0.0),
             },
             "velocity_range": {
-                "x": (-0.5, 0.5),
-                "y": (-0.5, 0.5),
-                "z": (-0.5, 0.5),
-                "roll": (-0.5, 0.5),
-                "pitch": (-0.5, 0.5),
-                "yaw": (-0.5, 0.5),
-                # "x": (-0.0, 0.0),
-                # "y": (-0.0, 0.0),
-                # "z": (-0.0, 0.0),
-                # "roll": (-0.0, 0.0),
-                # "pitch": (-0.0, 0.0),
-                # "yaw": (-0.0, 0.0),
+                # "x": (-0.5, 0.5),
+                # "y": (-0.5, 0.5),
+                # "z": (-0.5, 0.5),
+                # "roll": (-0.5, 0.5),
+                # "pitch": (-0.5, 0.5),
+                # "yaw": (-0.5, 0.5),
+                "x": (-0.0, 0.0),
+                "y": (-0.0, 0.0),
+                "z": (-0.0, 0.0),
+                "roll": (-0.0, 0.0),
+                "pitch": (-0.0, 0.0),
+                "yaw": (-0.0, 0.0),
             },
         },
     )
@@ -280,6 +356,30 @@ class CommandsCfg:
         debug_vis=True,
         ranges=mdp.UniformThresholdVelocityCommandCfg.Ranges(
             lin_vel_x=(-1.0, 1.0), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
+        ),
+    )
+
+
+@configclass
+class ParkourCommandsCfg:
+    """Waypoint route command specifications for Extreme Parkour terrain."""
+
+    base_velocity = mdp.WaypointVelocityCommandCfg(
+        asset_name="robot",
+        resampling_time_range=(20.0, 20.0),
+        rel_standing_envs=0.0,
+        rel_heading_envs=0.0,
+        heading_command=False,
+        heading_control_stiffness=1.2,
+        debug_vis=False,
+        terrain_names=EXTREME_PARKOUR_TERRAIN_NAMES,
+        routes=EXTREME_PARKOUR_ROUTES,
+        marker_routes=EXTREME_PARKOUR_MARKER_ROUTES,
+        tile_size=PARKOUR_TILE_SIZE,
+        speed_range=(0.35, 0.65),
+        waypoint_threshold=0.35,
+        ranges=mdp.WaypointVelocityCommandCfg.Ranges(
+            lin_vel_x=(0.0, 0.0), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0), heading=None
         ),
     )
 
@@ -384,7 +484,7 @@ class RewardsCfg:
         weight=0,
         params={"asset_cfg": SceneEntityCfg("robot", body_names="base")},
     )
-    upward = RewTerm(func=mdp.upward, weight=0.25)
+    upward = RewTerm(func=mdp.upward, weight=0.15)
 
     # ---------------------------------------------------------------------
     # Joint regularization
@@ -421,7 +521,7 @@ class RewardsCfg:
 
     joint_mirror = RewTerm(
         func=mdp.joint_mirror,
-        weight=-0.1,
+        weight=-0.0,
         params={
             "asset_cfg": SceneEntityCfg("robot"),
             "mirror_joints": [
@@ -479,7 +579,7 @@ class RewardsCfg:
     feet_air_time = RewTerm(
         func=mdp.feet_air_time,
         # weight=0.1,
-        weight=0.1,
+        weight=0.0,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "command_name": "base_velocity",
@@ -489,7 +589,7 @@ class RewardsCfg:
 
     feet_air_time_variance = RewTerm(
         func=mdp.feet_air_time_variance_penalty,
-        weight=-1.0,
+        weight=-0.0,
         # weight=0.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
     )
@@ -543,7 +643,7 @@ class RewardsCfg:
 
     feet_height_body = RewTerm(
         func=mdp.feet_height_body,
-        weight=-5.0,
+        weight=0.0,
         # weight=0.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
@@ -556,7 +656,7 @@ class RewardsCfg:
     feet_gait = RewTerm(
         func=mdp.GaitReward,
         # weight=0.0,
-        weight=0.5,
+        weight=0.0,
         params={
             "std": math.sqrt(0.5),
             "command_name": "base_velocity",
@@ -566,6 +666,28 @@ class RewardsCfg:
             "synced_feet_pair_names": (("FL_foot", "RR_foot"), ("FR_foot", "RL_foot")),
             "asset_cfg": SceneEntityCfg("robot"),
             "sensor_cfg": SceneEntityCfg("contact_forces"),
+        },
+    )
+
+
+@configclass
+class ParkourRewardsCfg(RewardsCfg):
+    """Reward terms used by the imported Extreme Parkour terrain task."""
+
+    feet_edge = RewTerm(
+        func=mdp.feet_edge,
+        weight=-1.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+            "terrain_names": EXTREME_PARKOUR_TERRAIN_NAMES,
+            "tile_size": PARKOUR_TILE_SIZE,
+            "horizontal_scale": PARKOUR_HORIZONTAL_SCALE,
+            "vertical_scale": 0.005,
+            "height_threshold": 0.05,
+            "edge_width": 0.05,
+            "contact_threshold": 1.0,
+            "terrain_level_threshold": None,
         },
     )
 
@@ -649,6 +771,28 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
 
 @configclass
+class RobotParkourEnvCfg(RobotEnvCfg):
+    """UIKA environment on imported Extreme Parkour terrains with waypoint commands."""
+
+    scene: RobotParkourSceneCfg = RobotParkourSceneCfg(num_envs=4096, env_spacing=2.5)
+    commands: ParkourCommandsCfg = ParkourCommandsCfg()
+    rewards: ParkourRewardsCfg = ParkourRewardsCfg()
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        self.curriculum.terrain_levels = None
+        self.curriculum.command_levels_lin_vel = None
+        self.curriculum.command_levels_ang_vel = None
+
+        if self.scene.terrain.terrain_generator is not None:
+            # Keep Isaac Lab's column-based terrain generation so the four columns stay fixed
+            # to T_step, Slope, BridgeA, and BridgeB, but disable terrain-level promotion.
+            self.scene.terrain.terrain_generator.curriculum = True
+            self.scene.terrain.max_init_terrain_level = 0
+
+
+@configclass
 class RobotPlayEnvCfg(RobotEnvCfg):
     def __post_init__(self):
         super().__post_init__()
@@ -669,3 +813,15 @@ class RobotPlayEnvCfg(RobotEnvCfg):
         self.commands.base_velocity.ranges = mdp.UniformThresholdVelocityCommandCfg.Ranges(
             lin_vel_x=(1.0, 1.0), lin_vel_y=(-0.0, 0.0), ang_vel_z=(-0, 0),
         )
+
+
+@configclass
+class RobotParkourPlayEnvCfg(RobotParkourEnvCfg):
+    def __post_init__(self):
+        super().__post_init__()
+        self.scene.num_envs = 64
+
+        self.curriculum.command_levels_lin_vel = None
+        self.curriculum.command_levels_ang_vel = None
+        self.commands.base_velocity.speed_range = (0.45, 0.45)
+        self.commands.base_velocity.debug_vis = True

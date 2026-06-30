@@ -76,3 +76,17 @@ class HfDiscreteObstaclesTerrainCfg(HfTerrainBaseCfg):
     """The width of the square flat platform at the center of the terrain in meters.
     This is the spawn area for the robot. Defaults to 1.0.
     """
+
+
+@configclass
+class HfExtremeParkourHeightmapTerrainCfg(HfTerrainBaseCfg):
+    """Configuration for imported Extreme Parkour heightmap terrains."""
+
+    function = him_terrains.hf_extreme_parkour_heightmap_terrain
+    """Name of the function to generate the terrain."""
+
+    terrain_name: str = MISSING
+    """Name in extreme_parkour.EXTREME_PARKOUR_SPECS, such as T_step_stl or BridgeA."""
+
+    heightmap_path: str | None = None
+    """Optional absolute or package-relative override path to a .npy heightmap."""
