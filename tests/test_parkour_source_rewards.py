@@ -116,25 +116,6 @@ def test_hip_pos_l2_uses_selected_joint_ids(monkeypatch):
     torch.testing.assert_close(reward, torch.tensor([5.0]))
 
 
-def test_track_goal_vel_from_command_projects_body_velocity_onto_command_direction(monkeypatch):
-    rewards = _load_rewards_module(monkeypatch)
-    robot = types.SimpleNamespace(
-        data=types.SimpleNamespace(
-            joint_pos=torch.zeros(3, 1),
-            root_lin_vel_b=torch.tensor([[0.5, 0.0, 0.0], [1.0, 1.0, 0.0], [-0.5, 0.0, 0.0]]),
-        )
-    )
-    command = torch.tensor([[1.0, 0.0, 0.0], [0.5, 0.5, 0.0], [1.0, 0.0, 0.0]])
-    env = _env_with_robot(robot, command=command)
-
-    reward = rewards.track_goal_vel_from_command(
-        env, command_name="base_velocity", asset_cfg=types.SimpleNamespace(name="robot")
-    )
-
-    expected = torch.tensor([0.5, 1.0, -0.5])
-    torch.testing.assert_close(reward, expected, atol=1e-5, rtol=1e-5)
-
-
 def test_source_base_motion_penalties_match_squared_components_without_upright_gate(monkeypatch):
     rewards = _load_rewards_module(monkeypatch)
     robot = types.SimpleNamespace(

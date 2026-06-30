@@ -694,8 +694,6 @@ class ParkourRewardsCfg(RewardsCfg):
     action_rate_l2 = None
     undesired_contacts = None
     contact_forces = None
-    track_lin_vel_xy = None
-    track_ang_vel_z = None
     feet_air_time = None
     feet_air_time_variance = None
     feet_contact = None
@@ -762,15 +760,12 @@ class ParkourRewardsCfg(RewardsCfg):
         weight=-1.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
     )
-    reward_tracking_goal_vel = RewTerm(
-        func=mdp.track_goal_vel_from_command,
+    track_lin_vel_xy = RewTerm(
+        func=mdp.track_lin_vel_xy_exp,
         weight=1.5,
-        params={
-            "command_name": "base_velocity",
-            "asset_cfg": SceneEntityCfg("robot"),
-        },
+        params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
-    reward_tracking_yaw = RewTerm(
+    track_ang_vel_z = RewTerm(
         func=mdp.track_ang_vel_z_exp,
         weight=0.5,
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},

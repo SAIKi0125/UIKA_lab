@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-def test_parkour_rewards_cfg_uses_source_parkour_reward_terms():
+def test_parkour_rewards_cfg_uses_source_parkour_regularizers_with_velocity_tracking():
     source = (
         Path(__file__).resolve().parents[1]
         / "source"
@@ -36,16 +36,21 @@ def test_parkour_rewards_cfg_uses_source_parkour_reward_terms():
         "reward_dof_acc = RewTerm(",
         "func=mdp.JointDofAccL2",
         "weight=-2.5e-7",
-        "reward_tracking_goal_vel = RewTerm(",
-        "func=mdp.track_goal_vel_from_command",
+        "track_lin_vel_xy = RewTerm(",
+        "func=mdp.track_lin_vel_xy_exp",
         "weight=1.5",
+        "track_ang_vel_z = RewTerm(",
+        "func=mdp.track_ang_vel_z_exp",
+        "weight=0.5",
         "reward_delta_torques = RewTerm(",
         "func=mdp.DeltaTorquesL2",
         "weight=-1.0e-7",
         "feet_stumble = RewTerm(",
         "weight=-1.0",
-        "track_lin_vel_xy = None",
     ]
 
     for snippet in expected_snippets:
         assert snippet in parkour_cfg
+
+    assert "reward_tracking_goal_vel" not in parkour_cfg
+    assert "track_goal_vel_from_command" not in parkour_cfg

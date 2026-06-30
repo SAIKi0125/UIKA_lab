@@ -149,28 +149,6 @@ def track_ang_vel_z_exp(
     return reward
 
 
-def track_goal_vel_from_command(
-    env: ManagerBasedRLEnv,
-    command_name: str,
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-) -> torch.Tensor:
-    """Reward velocity projected onto the current waypoint command direction.
-
-    The source Parkour task projects world velocity onto parkour-manager target direction.
-    Here the waypoint command already encodes that target direction as a body-frame velocity
-    command, so this term uses the command vector directly and keeps the same min(v, cmd)/cmd
-    saturation semantics.
-    """
-    asset: RigidObject = env.scene[asset_cfg.name]
-    command_xy = env.command_manager.get_command(command_name)[:, :2]
-    command_speed = torch.linalg.norm(command_xy, dim=1)
-    command_dir_b = command_xy / torch.clamp(command_speed.unsqueeze(1), min=1e-5)
-    proj_vel = torch.sum(command_dir_b * asset.data.root_lin_vel_b[:, :2], dim=1)
-    reward = torch.minimum(proj_vel, command_speed) / torch.clamp(command_speed, min=1e-5)
-    reward *= command_speed > 1e-5
-    return reward
-
-
 def joint_position_penalty(
     env: ManagerBasedRLEnv,
     asset_cfg: SceneEntityCfg,
