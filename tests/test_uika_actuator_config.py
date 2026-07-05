@@ -17,7 +17,7 @@ def test_uika_actuators_keep_delay_but_match_may31_motor_constants():
     assert "UIKA_ENCODER_BIAS" not in source
     assert "max_delay=UIKA_MOTOR_DELAY_STEPS" in source
     assert "delay_scale_range=UIKA_MOTOR_DELAY_SCALE_RANGE" in source
-    assert "damping=1.0" in source
+    assert "damping=1.5" in source
     assert "armature=0.0042" in source
     assert "friction=0.0" in source
 
