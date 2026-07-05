@@ -1,3 +1,4 @@
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -36,3 +37,25 @@ def test_uika_training_command_range_matches_may31_config():
     ).read_text()
 
     assert "lin_vel_x=(-1.0, 1.0), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-1.0, 1.0)" in source
+
+
+def test_uika_uses_simple_collision_urdf():
+    repo_root = Path(__file__).resolve().parents[1]
+    uika_source = (repo_root / "source" / "himloco_lab" / "himloco_lab" / "assets" / "uika.py").read_text()
+    urdf_path = (
+        repo_root
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "assets"
+        / "uika"
+        / "urdf"
+        / "uika_simple_collision.urdf"
+    )
+
+    assert "uika_simple_collision.urdf" in uika_source
+
+    root = ET.parse(urdf_path).getroot()
+    collision_geometries = [collision.find("geometry") for collision in root.findall(".//collision")]
+    assert collision_geometries
+    assert all(geometry.find("mesh") is None for geometry in collision_geometries)

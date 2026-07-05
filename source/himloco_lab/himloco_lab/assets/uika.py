@@ -46,7 +46,7 @@ class UIKAUrdfFileCfg(sim_utils.UrdfFileCfg):
 
 UIKA_CFG = UIKAArticulationCfg(
     spawn=UIKAUrdfFileCfg(
-        asset_path=f"{UIKA_ASSETS_DIR}/urdf/uika.urdf",
+        asset_path=f"{UIKA_ASSETS_DIR}/urdf/uika_simple_collision.urdf",
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.3357),
