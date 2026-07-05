@@ -60,6 +60,26 @@ def test_uika_training_command_range_matches_may31_config():
     assert "lin_vel_x=(-1.0, 1.0), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-1.0, 1.0)" in source
 
 
+def test_uika_training_uses_generated_terrain_curriculum():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "tasks"
+        / "locomotion"
+        / "robots"
+        / "uika"
+        / "velocity_env_cfg.py"
+    ).read_text()
+
+    assert 'terrain_type="generator"' in source
+    assert "terrain_generator=COBBLESTONE_ROAD_CFG" in source
+    assert "max_init_terrain_level=5" in source
+    assert "terrain_type=\"plane\"" not in source
+    assert "terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)" in source
+
+
 def test_uika_uses_original_collision_urdf():
     repo_root = Path(__file__).resolve().parents[1]
     uika_source = (repo_root / "source" / "himloco_lab" / "himloco_lab" / "assets" / "uika.py").read_text()
