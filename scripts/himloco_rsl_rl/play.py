@@ -10,6 +10,10 @@
 import argparse
 import sys
 
+from isaacsim_compat import configure_isaacsim_pip_extensions
+
+configure_isaacsim_pip_extensions()
+
 from isaaclab.app import AppLauncher
 
 # local imports
@@ -96,7 +100,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: HIMOnPolicyRunnerCfg):
     print(f"[INFO] Loading experiment from directory: {log_root_path}")
     
     # get checkpoint path
-    if args_cli.checkpoint:
+    if args_cli.checkpoint and (os.path.isabs(args_cli.checkpoint) or os.path.exists(args_cli.checkpoint)):
         resume_path = retrieve_file_path(args_cli.checkpoint)
     else:
         resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
@@ -167,7 +171,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: HIMOnPolicyRunnerCfg):
         path=export_model_dir,
         encoder_filename="encoder.onnx",
         policy_filename="policy.onnx",
-        verbose=False
+        verbose=False,
+        skip_if_unavailable=True,
     )
 
     dt = env.unwrapped.step_dt

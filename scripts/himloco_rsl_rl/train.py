@@ -10,6 +10,10 @@
 import argparse
 import sys
 
+from isaacsim_compat import configure_isaacsim_pip_extensions
+
+configure_isaacsim_pip_extensions()
+
 from isaaclab.app import AppLauncher
 
 # local imports

@@ -6,6 +6,7 @@
 """Export utilities for HimLoco dual network architecture (encoder + policy)."""
 
 import copy
+import importlib.util
 import os
 import torch
 import torch.nn.functional as F
@@ -98,7 +99,8 @@ def export_himloco_policy_as_onnx(
     path: str,
     encoder_filename: str = "encoder.onnx",
     policy_filename: str = "policy.onnx",
-    verbose: bool = False
+    verbose: bool = False,
+    skip_if_unavailable: bool = False,
 ):
     """Export HimLoco dual network (encoder + policy) as separate ONNX files.
     
@@ -108,7 +110,12 @@ def export_himloco_policy_as_onnx(
         encoder_filename: The name of exported encoder ONNX file. Defaults to "encoder.onnx".
         policy_filename: The name of exported policy ONNX file. Defaults to "policy.onnx".
         verbose: Whether to print the model summary. Defaults to False.
+        skip_if_unavailable: If True, skip ONNX export when the optional ``onnx`` package is not installed.
     """
+    if skip_if_unavailable and importlib.util.find_spec("onnx") is None:
+        print("[WARN] Skipping ONNX export because the optional 'onnx' package is not installed.")
+        return False
+
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
     
@@ -122,6 +129,7 @@ def export_himloco_policy_as_onnx(
     
     print(f"[INFO] Exported encoder to: {os.path.join(path, encoder_filename)}")
     print(f"[INFO] Exported policy to: {os.path.join(path, policy_filename)}")
+    return True
 
 
 class _HimlocoEncoderOnnxExporter(torch.nn.Module):
