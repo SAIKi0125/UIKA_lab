@@ -42,8 +42,7 @@ def command_levels_lin_vel(
             new_vel_y = torch.clamp(new_vel_y, min=env._final_vel_y[0], max=env._final_vel_y[1])
 
             base_velocity_ranges.lin_vel_x = new_vel_x.tolist()
-            # RobotLab keeps lateral curriculum disabled for Go2-style velocity training.
-            # base_velocity_ranges.lin_vel_y = new_vel_y.tolist()
+            base_velocity_ranges.lin_vel_y = new_vel_y.tolist()
 
     return torch.tensor(base_velocity_ranges.lin_vel_x[1], device=env.device)
 

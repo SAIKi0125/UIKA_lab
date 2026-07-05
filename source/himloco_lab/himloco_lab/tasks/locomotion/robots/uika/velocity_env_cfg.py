@@ -21,12 +21,6 @@ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 from himloco_lab.assets.uika import UIKA_CFG as ROBOT_CFG
 from himloco_lab.tasks.locomotion import mdp
 import himloco_lab.terrains as him_terrains
-from himloco_lab.terrains.extreme_parkour import (
-    build_extreme_parkour_marker_routes,
-    build_extreme_parkour_routes,
-    build_flat_parkour_marker_route,
-    build_flat_parkour_route,
-)
 
 UIKA_JOINT_NAMES = list(ROBOT_CFG.joint_sdk_names)
 
@@ -86,51 +80,6 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
     },
 )
 
-PARKOUR_TILE_SIZE = (8.0, 8.0)
-PARKOUR_HORIZONTAL_SCALE = 0.05
-EXTREME_PARKOUR_HEIGHTMAP_TERRAIN_NAMES = ("T_step_stl", "Slope", "BridgeA", "BridgeB")
-FLAT_PARKOUR_TERRAIN_NAME = "Flat"
-EXTREME_PARKOUR_TERRAIN_NAMES = EXTREME_PARKOUR_HEIGHTMAP_TERRAIN_NAMES + (FLAT_PARKOUR_TERRAIN_NAME,)
-EXTREME_PARKOUR_ROUTES = build_extreme_parkour_routes(
-    tile_size=PARKOUR_TILE_SIZE,
-    horizontal_scale=PARKOUR_HORIZONTAL_SCALE,
-    vertical_scale=0.005,
-)
-EXTREME_PARKOUR_ROUTES[FLAT_PARKOUR_TERRAIN_NAME] = build_flat_parkour_route(tile_size=PARKOUR_TILE_SIZE)
-EXTREME_PARKOUR_MARKER_ROUTES = build_extreme_parkour_marker_routes(
-    tile_size=PARKOUR_TILE_SIZE,
-    horizontal_scale=PARKOUR_HORIZONTAL_SCALE,
-    vertical_scale=0.005,
-)
-EXTREME_PARKOUR_MARKER_ROUTES[FLAT_PARKOUR_TERRAIN_NAME] = build_flat_parkour_marker_route(
-    EXTREME_PARKOUR_ROUTES[FLAT_PARKOUR_TERRAIN_NAME]
-)
-
-EXTREME_PARKOUR_CFG = terrain_gen.TerrainGeneratorCfg(
-    size=PARKOUR_TILE_SIZE,
-    border_width=25.0,
-    num_rows=10,
-    num_cols=18,
-    horizontal_scale=PARKOUR_HORIZONTAL_SCALE,
-    vertical_scale=0.005,
-    slope_threshold=0.75,
-    difficulty_range=(0.0, 1.0),
-    use_cache=True,
-    sub_terrains={
-        name: him_terrains.HfExtremeParkourHeightmapTerrainCfg(
-            proportion=1.0,
-            border_width=0.0,
-            terrain_name=name,
-        )
-        for name in EXTREME_PARKOUR_HEIGHTMAP_TERRAIN_NAMES
-    }
-    | {
-        FLAT_PARKOUR_TERRAIN_NAME: terrain_gen.MeshPlaneTerrainCfg(
-            proportion=0.5,
-        )
-    },
-)
-
 
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
@@ -171,14 +120,6 @@ class RobotSceneCfg(InteractiveSceneCfg):
     )
     robot: ArticulationCfg = ROBOT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
-    height_scanner = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/base",
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-        ray_alignment="yaw",
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
-        debug_vis=False,
-        mesh_prim_paths=["/World/ground"],
-    )
     base_height_scanner = RayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
@@ -194,31 +135,6 @@ class RobotSceneCfg(InteractiveSceneCfg):
             intensity=750.0,
             texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
         ),
-    )
-
-
-@configclass
-class RobotParkourSceneCfg(RobotSceneCfg):
-    """Scene configuration using imported Extreme Parkour terrains."""
-
-    terrain = TerrainImporterCfg(
-        prim_path="/World/ground",
-        terrain_type="generator",
-        terrain_generator=EXTREME_PARKOUR_CFG,
-        max_init_terrain_level=5,
-        collision_group=-1,
-        physics_material=sim_utils.RigidBodyMaterialCfg(
-            friction_combine_mode="multiply",
-            restitution_combine_mode="multiply",
-            static_friction=1.0,
-            dynamic_friction=1.0,
-        ),
-        visual_material=sim_utils.MdlFileCfg(
-            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
-            project_uvw=True,
-            texture_scale=(0.25, 0.25),
-        ),
-        debug_vis=False,
     )
 
 
@@ -294,8 +210,8 @@ class EventCfg:
                 # "roll": (-3.14, 3.14),
                 # "pitch": (-3.14, 3.14),
                 # "yaw": (-3.14, 3.14),
-                "x": (-3.5, -3.5),
-                "y": (-1.0, 1.0),
+                "x": (-0.0, -0.0),
+                "y": (-0.0, 0.0),
                 "z": (0.0, 0.0),
                 "roll": (-0.0, 0.0),
                 "pitch": (-0.0, 0.0),
@@ -346,41 +262,15 @@ class EventCfg:
 class CommandsCfg:
     """Command specifications for the MDP."""
 
-    base_velocity = mdp.UniformThresholdVelocityCommandCfg(
+    base_velocity = mdp.UniformLevelVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
-        rel_standing_envs=0.02,
-        rel_heading_envs=1.0,
-        heading_command=True,
-        heading_control_stiffness=0.5,
         debug_vis=True,
-        ranges=mdp.UniformThresholdVelocityCommandCfg.Ranges(
-            lin_vel_x=(-1.0, 1.0), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
-        ),
-    )
-
-
-@configclass
-class ParkourCommandsCfg:
-    """Waypoint route command specifications for Extreme Parkour terrain."""
-
-    base_velocity = mdp.WaypointVelocityCommandCfg(
-        asset_name="robot",
-        resampling_time_range=(20.0, 20.0),
-        rel_standing_envs=0.0,
-        rel_heading_envs=0.0,
         heading_command=False,
-        heading_control_stiffness=1.2,
-        debug_vis=False,
-        terrain_names=EXTREME_PARKOUR_TERRAIN_NAMES,
-        routes=EXTREME_PARKOUR_ROUTES,
-        marker_routes=EXTREME_PARKOUR_MARKER_ROUTES,
-        tile_size=PARKOUR_TILE_SIZE,
-        speed_range=(0.35, 0.65),
-        waypoint_threshold=0.35,
-        ranges=mdp.WaypointVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.0, 0.0), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0), heading=None
+        ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
+            lin_vel_x=(-2.0, 2.0), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-1.0, 1.0), heading=None
         ),
+        heading_control_stiffness=0.5,
     )
 
 
@@ -437,13 +327,6 @@ class ObservationsCfg:
             params={"asset_cfg": SceneEntityCfg("robot", body_names="base")},
             clip=(-100, 100),
         )
-        height_scanner = ObsTerm(
-            func=mdp.height_scan_clip,
-            scale=5.0,
-            params={"sensor_cfg": SceneEntityCfg("height_scanner")},
-            clip=(-100, 100),
-            noise=Unoise(n_min=-0.1, n_max=0.1),
-        )
 
         def __post_init__(self):
             self.enable_corruption = True
@@ -455,112 +338,7 @@ class ObservationsCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
 
-    # ---------------------------------------------------------------------
-    # Episode state
-    # ---------------------------------------------------------------------
-    # Episode-level bookkeeping rewards. Termination is registered but disabled;
-    # falls and illegal contacts are handled by termination terms and contact penalties.
-    is_terminated = RewTerm(func=mdp.is_terminated, weight=0)
-
-    # ---------------------------------------------------------------------
-    # Base/root regularization
-    # ---------------------------------------------------------------------
-    # Shape body motion and posture while leaving planar/yaw tracking to command rewards.
-    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
-    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=0)
-    base_height_l2 = RewTerm(
-        func=mdp.base_height_l2,
-        weight=0.0,
-        params={
-            "target_height": 0.3,
-            "asset_cfg": SceneEntityCfg("robot", body_names="base"),
-            "sensor_cfg": SceneEntityCfg("base_height_scanner"),
-        },
-    )
-
-    body_lin_acc_l2 = RewTerm(
-        func=mdp.body_lin_acc_l2,
-        weight=0,
-        params={"asset_cfg": SceneEntityCfg("robot", body_names="base")},
-    )
-    upward = RewTerm(func=mdp.upward, weight=0.15)
-
-    # ---------------------------------------------------------------------
-    # Joint regularization
-    # ---------------------------------------------------------------------
-    # Keep joint motion conservative: limit torque/power, acceleration, soft-limit hits,
-    # deviation from default posture, and diagonal leg asymmetry.
-    joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-2.5e-5)
-    joint_power = RewTerm(func=mdp.joint_power, weight=-2e-5)
-    joint_vel_l2 = RewTerm(func=mdp.joint_vel_l2, weight=0)
-    joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
-    joint_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
-    joint_vel_limits = RewTerm(func=mdp.joint_vel_limits, weight=0, params={"soft_ratio": 1.0})
-    stand_still = RewTerm(
-        func=mdp.stand_still,
-        weight=-2.0,
-        params={
-            "command_name": "base_velocity",
-            "command_threshold": 0.1,
-            "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-        },
-    )
-
-    joint_pos_penalty = RewTerm(
-        func=mdp.joint_pos_penalty,
-        weight=-0.3,
-        params={
-            "command_name": "base_velocity",
-            "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "stand_still_scale": 16.0,
-            "velocity_threshold": 0.5,
-            "command_threshold": 0.1,
-        },
-    )
-
-    joint_mirror = RewTerm(
-        func=mdp.joint_mirror,
-        weight=-0.0,
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "mirror_joints": [
-                ["FR_(thigh|calf).*", "RL_(thigh|calf).*"],
-                ["FL_(thigh|calf).*", "RR_(thigh|calf).*"],
-            ],
-            "use_default_offset": True,
-        },
-    )
-
-    # ---------------------------------------------------------------------
-    # Action smoothness
-    # ---------------------------------------------------------------------
-    # Penalize large step-to-step action changes.
-    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
-
-    # ---------------------------------------------------------------------
-    # Contact penalties
-    # ---------------------------------------------------------------------
-    # Penalize non-foot contacts and excessive foot impact forces.
-    undesired_contacts = RewTerm(
-        func=mdp.undesired_contacts,
-        weight=-1.0,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="^(?!.*_foot).*"),
-            "threshold": 1.0,
-        },
-    )
-    contact_forces = RewTerm(
-        func=mdp.contact_forces,
-        # weight=-1.5e-4,
-        weight=0.0,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"), "threshold": 100.0},
-    )
-
-    # ---------------------------------------------------------------------
-    # Command tracking
-    # ---------------------------------------------------------------------
-    # Main task rewards: track commanded planar velocity and yaw rate.
+    # -- task
     track_lin_vel_xy = RewTerm(
         func=mdp.track_lin_vel_xy_exp,
         weight=1.0,
@@ -572,209 +350,35 @@ class RewardsCfg:
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
 
-    # ---------------------------------------------------------------------
-    # Foot timing and gait
-    # ---------------------------------------------------------------------
-    # Shape foot timing, stance behavior, sliding, clearance, and diagonal trot rhythm.
-    feet_air_time = RewTerm(
-        func=mdp.feet_air_time,
-        # weight=0.1,
-        weight=0.0,
+    # -- base
+    base_linear_velocity = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
+    base_angular_velocity = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-0.2)
+    joint_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    energy = RewTerm(func=mdp.energy, weight=-2e-5)
+
+    base_height_l2 = RewTerm(
+        func=mdp.base_height,
+        weight=-1.0,
         params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "command_name": "base_velocity",
-            "threshold": 0.5,
-        },
-    )
-
-    feet_air_time_variance = RewTerm(
-        func=mdp.feet_air_time_variance_penalty,
-        weight=-0.0,
-        # weight=0.0,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
-    )
-
-    feet_contact = RewTerm(
-        func=mdp.feet_contact,
-        weight=-0.0,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "command_name": "base_velocity",
-            "expect_contact_num": 2,
-        },
-    )
-
-    feet_contact_without_cmd = RewTerm(
-        func=mdp.feet_contact_without_cmd,
-        weight=0.1,
-        # weight=0.0,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "command_name": "base_velocity",
-        },
-    )
-
-    feet_stumble = RewTerm(
-        func=mdp.feet_stumble,
-        weight=0.0,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
-    )
-
-    feet_slide = RewTerm(
-        func=mdp.feet_slide,
-        weight=-0.1,
-        # weight=0.0,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-        },
-    )
-
-    feet_height = RewTerm(
-        func=mdp.feet_height,
-        weight=-0.0,
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            "tanh_mult": 2.0,
-            "target_height": 0.05,
-            "command_name": "base_velocity",
+            "target_height": 0.3,
+            "sensor_cfg": SceneEntityCfg("base_height_scanner"),
         },
     )
 
     feet_height_body = RewTerm(
         func=mdp.feet_height_body,
-        weight=0.0,
-        # weight=0.0,
+        weight=-0.01,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            "target_height": -0.23,
+            "target_height": -0.2,
+            "command_name": "base_velocity",
             "tanh_mult": 2.0,
-            "command_name": "base_velocity",
         },
     )
 
-    feet_gait = RewTerm(
-        func=mdp.GaitReward,
-        # weight=0.0,
-        weight=0.0,
-        params={
-            "std": math.sqrt(0.5),
-            "command_name": "base_velocity",
-            "max_err": 0.2,
-            "velocity_threshold": 0.5,
-            "command_threshold": 0.1,
-            "synced_feet_pair_names": (("FL_foot", "RR_foot"), ("FR_foot", "RL_foot")),
-            "asset_cfg": SceneEntityCfg("robot"),
-            "sensor_cfg": SceneEntityCfg("contact_forces"),
-        },
-    )
-
-
-@configclass
-class ParkourRewardsCfg(RewardsCfg):
-    """Reward terms used by the imported Extreme Parkour terrain task."""
-
-    # Disable baseline velocity-task rewards that over-constrain parkour motions.
-    is_terminated = None
-    lin_vel_z_l2 = None
-    ang_vel_xy_l2 = None
-    flat_orientation_l2 = None
-    base_height_l2 = None
-    body_lin_acc_l2 = None
-    upward = None
-    joint_torques_l2 = None
-    joint_power = None
-    joint_vel_l2 = None
-    joint_acc_l2 = None
-    joint_pos_limits = None
-    joint_vel_limits = None
-    stand_still = None
-    joint_pos_penalty = None
-    joint_mirror = None
-    action_rate_l2 = None
-    undesired_contacts = None
-    contact_forces = None
-    feet_air_time = None
-    feet_air_time_variance = None
-    feet_contact = None
-    feet_contact_without_cmd = None
-    feet_slide = None
-    feet_height = None
-    feet_height_body = None
-    feet_gait = None
-
-    reward_collision = RewTerm(
-        func=mdp.collision_contacts,
-        weight=-10.0,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["base", ".*_calf", ".*_thigh"]),
-            "threshold": 0.1,
-        },
-    )
-
-    feet_edge = RewTerm(
-        func=mdp.feet_edge,
-        weight=-1.0,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            "terrain_names": EXTREME_PARKOUR_TERRAIN_NAMES,
-            "tile_size": PARKOUR_TILE_SIZE,
-            "horizontal_scale": PARKOUR_HORIZONTAL_SCALE,
-            "vertical_scale": 0.005,
-            "height_threshold": 0.05,
-            "edge_width": 0.05,
-            "contact_threshold": 1.0,
-            "terrain_level_threshold": None,
-        },
-    )
-
-    reward_torques = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-5)
-    reward_dof_error = RewTerm(
-        func=mdp.joint_dof_error_l2,
-        weight=-0.04,
-        params={"asset_cfg": SceneEntityCfg("robot")},
-    )
-    reward_hip_pos = RewTerm(
-        func=mdp.hip_pos_l2,
-        weight=-0.5,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=".*_hip_joint")},
-    )
-    reward_ang_vel_xy = RewTerm(func=mdp.source_ang_vel_xy_l2, weight=-0.05)
-    reward_action_rate = RewTerm(
-        func=mdp.ActionRateNorm,
-        weight=-0.1,
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "action_term_name": "JointPositionAction",
-        },
-    )
-    reward_dof_acc = RewTerm(
-        func=mdp.JointDofAccL2,
-        weight=-2.5e-7,
-        params={"asset_cfg": SceneEntityCfg("robot")},
-    )
-    reward_lin_vel_z = RewTerm(func=mdp.source_lin_vel_z_l2, weight=-0.5)
-    feet_stumble = RewTerm(
-        func=mdp.feet_stumble,
-        weight=-1.0,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
-    )
-    track_lin_vel_xy = RewTerm(
-        func=mdp.track_lin_vel_xy_exp,
-        weight=1.5,
-        params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
-    )
-    track_ang_vel_z = RewTerm(
-        func=mdp.track_ang_vel_z_exp,
-        weight=0.5,
-        params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
-    )
-    reward_delta_torques = RewTerm(
-        func=mdp.DeltaTorquesL2,
-        weight=-1.0e-7,
-        params={"asset_cfg": SceneEntityCfg("robot")},
-    )
+    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
+    smoothness = RewTerm(func=mdp.smoothness, weight=-0.01)
 
 
 @configclass
@@ -794,22 +398,20 @@ class CurriculumCfg:
     """Curriculum terms for the MDP."""
 
     terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
-    command_levels_lin_vel = None
-    command_levels_ang_vel = None
-    # command_levels_lin_vel = CurrTerm(
-    #     func=mdp.command_levels_lin_vel,
-    #     params={
-    #         "reward_term_name": "track_lin_vel_xy",
-    #         "range_multiplier": (0.1, 1.0),
-    #     },
-    # )
-    # command_levels_ang_vel = CurrTerm(
-    #     func=mdp.command_levels_ang_vel,
-    #     params={
-    #         "reward_term_name": "track_ang_vel_z",
-    #         "range_multiplier": (0.1, 1.0),
-    #     },
-    # )
+    command_levels_lin_vel = CurrTerm(
+        func=mdp.command_levels_lin_vel,
+        params={
+            "reward_term_name": "track_lin_vel_xy",
+            "range_multiplier": (0.1, 1.0),
+        },
+    )
+    command_levels_ang_vel = CurrTerm(
+        func=mdp.command_levels_ang_vel,
+        params={
+            "reward_term_name": "track_ang_vel_z",
+            "range_multiplier": (0.1, 1.0),
+        },
+    )
 
 
 @configclass
@@ -827,10 +429,10 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
     def __post_init__(self):
         """Post initialization."""
-        self.decimation = 4
+        self.decimation = 2
         self.episode_length_s = 20.0
 
-        self.sim.dt = 0.005
+        self.sim.dt = 0.0025
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
 
@@ -843,7 +445,6 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.physx.gpu_max_rigid_contact_count = 2**23
 
         self.scene.contact_forces.update_period = self.sim.dt
-        self.scene.height_scanner.update_period = self.sim.dt * self.decimation
         self.scene.base_height_scanner.update_period = self.sim.dt * self.decimation
 
         if self.scene.terrain.terrain_generator is None:
@@ -856,57 +457,19 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
 
 @configclass
-class RobotParkourEnvCfg(RobotEnvCfg):
-    """UIKA environment on imported Extreme Parkour terrains with waypoint commands."""
-
-    scene: RobotParkourSceneCfg = RobotParkourSceneCfg(num_envs=4096, env_spacing=2.5)
-    commands: ParkourCommandsCfg = ParkourCommandsCfg()
-    rewards: ParkourRewardsCfg = ParkourRewardsCfg()
-
+class RobotPlayEnvCfg(RobotEnvCfg):
     def __post_init__(self):
+        self.scene.terrain.terrain_type = "plane"
+        self.scene.terrain.terrain_generator = None
         super().__post_init__()
+        self.scene.num_envs = 64
 
         self.curriculum.terrain_levels = None
         self.curriculum.command_levels_lin_vel = None
         self.curriculum.command_levels_ang_vel = None
-
-        if self.scene.terrain.terrain_generator is not None:
-            # Keep Isaac Lab's column-based terrain generation so the four columns stay fixed
-            # to T_step, Slope, BridgeA, and BridgeB, but disable terrain-level promotion.
-            self.scene.terrain.terrain_generator.curriculum = True
-            self.scene.terrain.max_init_terrain_level = 0
-
-
-@configclass
-class RobotPlayEnvCfg(RobotEnvCfg):
-    def __post_init__(self):
-        super().__post_init__()
-        self.scene.num_envs = 64
-
-        if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.num_cols = 10
-            self.scene.terrain.terrain_generator.curriculum = True
-            self.scene.terrain.max_init_terrain_level = 10
-        else:
-            self.curriculum.terrain_levels = None
-            self.terminations.terrain_out_of_bounds = None
-
-        self.curriculum.command_levels_lin_vel = None
-        self.curriculum.command_levels_ang_vel = None
+        self.terminations.terrain_out_of_bounds = None
 
         self.commands.base_velocity.heading_command = False
-        self.commands.base_velocity.ranges = mdp.UniformThresholdVelocityCommandCfg.Ranges(
-            lin_vel_x=(1.0, 1.0), lin_vel_y=(-0.0, 0.0), ang_vel_z=(-0, 0),
+        self.commands.base_velocity.ranges = mdp.UniformLevelVelocityCommandCfg.Ranges(
+            lin_vel_x=(0.3, 0.3), lin_vel_y=(-0.0, 0.0), ang_vel_z=(-0, 0),
         )
-
-
-@configclass
-class RobotParkourPlayEnvCfg(RobotParkourEnvCfg):
-    def __post_init__(self):
-        super().__post_init__()
-        self.scene.num_envs = 64
-
-        self.curriculum.command_levels_lin_vel = None
-        self.curriculum.command_levels_ang_vel = None
-        self.commands.base_velocity.speed_range = (0.45, 0.45)
-        self.commands.base_velocity.debug_vis = True

@@ -34,13 +34,13 @@ class UniformLevelVelocityCommandCfg(UniformVelocityCommandCfg):
 
     class_type: type = UniformLevelVelocityCommand
 
-    curriculums_limit_ranges: tuple[float, float] = MISSING
+    curriculums_limit_ranges: tuple[float, float] | None = None
     
-    low_vel_env_lin_x_ranges: tuple[float, float] = MISSING
+    low_vel_env_lin_x_ranges: tuple[float, float] | None = None
     
-    rel_high_vel_envs: float = MISSING
+    rel_high_vel_envs: float | None = None
     
-    min_command_norm: float = MISSING
+    min_command_norm: float | None = None
 
 
 @configclass

@@ -96,10 +96,20 @@ def lin_vel_z_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntity
     return reward
 
 
-def source_lin_vel_z_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+def source_lin_vel_z_l2(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    terrain_names: tuple[str, ...] | None = None,
+    flat_terrain_names: tuple[str, ...] = ("Flat", "parkour_flat"),
+    nonflat_scale: float = 0.5,
+) -> torch.Tensor:
     """Source Parkour z-axis base velocity penalty without target-side upright gating."""
     asset: RigidObject = env.scene[asset_cfg.name]
-    return torch.square(asset.data.root_lin_vel_b[:, 2])
+    reward = torch.square(asset.data.root_lin_vel_b[:, 2])
+    if terrain_names is not None:
+        flat_mask = _flat_terrain_mask(env, terrain_names=terrain_names, flat_terrain_names=flat_terrain_names)
+        reward = torch.where(flat_mask, reward, reward * nonflat_scale)
+    return reward
 
 
 def ang_vel_xy_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
@@ -114,6 +124,21 @@ def source_ang_vel_xy_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Sce
     """Source Parkour xy-axis angular velocity penalty without target-side upright gating."""
     asset: RigidObject = env.scene[asset_cfg.name]
     return torch.sum(torch.square(asset.data.root_ang_vel_b[:, :2]), dim=1)
+
+
+def source_flat_orientation_l2(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    terrain_names: tuple[str, ...] | None = None,
+    flat_terrain_names: tuple[str, ...] = ("Flat", "parkour_flat"),
+) -> torch.Tensor:
+    """Source Parkour orientation penalty that is active only on flat terrain."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    reward = torch.sum(torch.square(asset.data.projected_gravity_b[:, :2]), dim=1)
+    if terrain_names is None:
+        return reward
+    flat_mask = _flat_terrain_mask(env, terrain_names=terrain_names, flat_terrain_names=flat_terrain_names)
+    return torch.where(flat_mask, reward, torch.zeros_like(reward))
 
 
 def flat_orientation_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
@@ -311,6 +336,17 @@ def feet_stumble(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg) -> torch.Te
     return reward
 
 
+def source_feet_stumble(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
+    """Source Parkour foot stumble penalty without upright gating."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    net_contact_forces = contact_sensor.data.net_forces_w_history[:, 0, sensor_cfg.body_ids]
+    reward = torch.any(
+        torch.linalg.norm(net_contact_forces[:, :, :2], dim=2) > 4 * torch.abs(net_contact_forces[:, :, 2]),
+        dim=1,
+    )
+    return reward.float()
+
+
 def _edge_mask_tensor(
     env: ManagerBasedRLEnv,
     edge_masks: dict[str, object],
@@ -374,6 +410,22 @@ def _terrain_route_ids_from_env_origins(
     return column_to_route[torch.clamp(col_idx, min=0, max=num_cols - 1)]
 
 
+def _flat_terrain_mask(
+    env: ManagerBasedRLEnv,
+    terrain_names: tuple[str, ...],
+    flat_terrain_names: tuple[str, ...],
+) -> torch.Tensor:
+    route_ids = _terrain_route_ids_from_env_origins(env, terrain_names)
+    flat_route_ids = [idx for idx, name in enumerate(terrain_names) if name in flat_terrain_names]
+    if len(flat_route_ids) == 0:
+        return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+    flat_mask = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+    for route_id in flat_route_ids:
+        flat_mask |= route_ids == route_id
+    return flat_mask
+
+
 def feet_edge(
     env: ManagerBasedRLEnv,
     sensor_cfg: SceneEntityCfg,
@@ -424,7 +476,6 @@ def feet_edge(
         if terrain_levels is not None:
             reward *= terrain_levels.to(env.device) > terrain_level_threshold
 
-    reward *= _upright_gate(env)
     return reward
 
 

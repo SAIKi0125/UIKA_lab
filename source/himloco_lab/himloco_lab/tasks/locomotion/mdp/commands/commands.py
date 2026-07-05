@@ -299,7 +299,8 @@ class UniformLevelVelocityCommand(UniformVelocityCommand):
         # sample velocity commands
         r = torch.empty(len(env_ids), device=self.device)
         # -- linear velocity - x direction
-        self.vel_command_b[env_ids, 0] = r.uniform_(*self.cfg.low_vel_env_lin_x_ranges)
+        lin_vel_x_range = self.cfg.low_vel_env_lin_x_ranges or self.cfg.ranges.lin_vel_x
+        self.vel_command_b[env_ids, 0] = r.uniform_(*lin_vel_x_range)
         # -- linear velocity - y direction
         self.vel_command_b[env_ids, 1] = r.uniform_(*self.cfg.ranges.lin_vel_y)
         # -- ang vel yaw - rotation around z
@@ -310,20 +311,23 @@ class UniformLevelVelocityCommand(UniformVelocityCommand):
             # update heading envs
             self.is_heading_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_heading_envs
         
-        high_vel_env_ids = env_ids <= (self.num_envs * self.cfg.rel_high_vel_envs)
-        high_vel_env_ids = env_ids[high_vel_env_ids.nonzero(as_tuple=True)]
-        r_high = torch.empty(len(high_vel_env_ids), device=self.device)
-        self.vel_command_b[high_vel_env_ids, 0] = r_high.uniform_(*self.cfg.ranges.lin_vel_x)
-        # set y commands of high vel envs to zero
-        low_vel_x_min = self.cfg.low_vel_env_lin_x_ranges[0]
-        low_vel_x_max = self.cfg.low_vel_env_lin_x_ranges[1]
-        in_low_vel_range = (self.vel_command_b[high_vel_env_ids, 0:1] >= low_vel_x_min) & \
-                            (self.vel_command_b[high_vel_env_ids, 0:1] <= low_vel_x_max)
-        self.vel_command_b[high_vel_env_ids, 1:2] *= in_low_vel_range
+        if self.cfg.rel_high_vel_envs is not None:
+            high_vel_env_ids = env_ids <= (self.num_envs * self.cfg.rel_high_vel_envs)
+            high_vel_env_ids = env_ids[high_vel_env_ids.nonzero(as_tuple=True)]
+            r_high = torch.empty(len(high_vel_env_ids), device=self.device)
+            self.vel_command_b[high_vel_env_ids, 0] = r_high.uniform_(*self.cfg.ranges.lin_vel_x)
+            if self.cfg.low_vel_env_lin_x_ranges is not None:
+                # set y commands of high vel envs to zero
+                low_vel_x_min = self.cfg.low_vel_env_lin_x_ranges[0]
+                low_vel_x_max = self.cfg.low_vel_env_lin_x_ranges[1]
+                in_low_vel_range = (self.vel_command_b[high_vel_env_ids, 0:1] >= low_vel_x_min) & \
+                                    (self.vel_command_b[high_vel_env_ids, 0:1] <= low_vel_x_max)
+                self.vel_command_b[high_vel_env_ids, 1:2] *= in_low_vel_range
         
         # set small commands to zero
-        self.vel_command_b[env_ids, :2] *= (torch.norm(self.vel_command_b[env_ids, :2], dim=1) > \
-                                            self.cfg.min_command_norm).unsqueeze(1)
+        if self.cfg.min_command_norm is not None:
+            self.vel_command_b[env_ids, :2] *= (torch.norm(self.vel_command_b[env_ids, :2], dim=1) > \
+                                                self.cfg.min_command_norm).unsqueeze(1)
         
     def _update_command(self):
         """Post-processes the velocity command.

@@ -19,6 +19,19 @@ def format_value(x):
         return x
 
 
+def _obs_term_scale(env: ManagerBasedRLEnv, group_name: str, term_name: str, default: float) -> float:
+    group_cfg = getattr(env.cfg.observations, group_name, None)
+    term_cfg = getattr(group_cfg, term_name, None) if group_cfg is not None else None
+    if term_cfg is None or term_cfg.scale is None:
+        return default
+    scale = term_cfg.scale
+    if hasattr(scale, "detach"):
+        scale = scale.detach().cpu().numpy().tolist()
+    if isinstance(scale, (list, tuple)):
+        return float(scale[0])
+    return float(scale)
+
+
 def export_deploy_cfg(env: ManagerBasedRLEnv, log_dir, history_length: int = 0, use_encoder: bool = True):
     """Export deployment configuration for real robot.
     
@@ -37,6 +50,8 @@ def export_deploy_cfg(env: ManagerBasedRLEnv, log_dir, history_length: int = 0, 
     # --- Network architecture ---
     cfg["use_encoder"] = use_encoder
     cfg["history_length"] = history_length+1
+    cfg["lin_vel_scale"] = _obs_term_scale(env, "critic", "base_lin_vel", 2.0)
+    cfg["ang_vel_scale"] = _obs_term_scale(env, "policy", "base_ang_vel", 0.25)
     
     # --- Robot configuration ---
     cfg["joint_ids_map"] = joint_ids_map

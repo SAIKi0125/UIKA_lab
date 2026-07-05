@@ -82,6 +82,9 @@ class HimlocoManagerBasedRLEnv(ManagerBasedRLEnv):
         self.reset_time_outs = self.termination_manager.time_outs
         # -- reward computation
         self.reward_buf = self.reward_manager.compute(dt=self.step_dt)
+        reward_clip_min = getattr(self.cfg, "reward_clip_min", None)
+        if reward_clip_min is not None:
+            self.reward_buf = torch.clamp(self.reward_buf, min=reward_clip_min)
 
         if len(self.recorder_manager.active_terms) > 0:
             # update observations for recording if needed
