@@ -3,14 +3,11 @@
 import os
 
 import isaaclab.sim as sim_utils
+from isaaclab.actuators import DCMotorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 from isaaclab.utils import configclass
 
-from himloco_lab.assets.pace_actuator_cfg import PaceDCMotorCfg
-
 UIKA_ASSETS_DIR = os.path.join(os.path.dirname(__file__), "uika")
-UIKA_MOTOR_DELAY_STEPS = 6
-UIKA_MOTOR_DELAY_SCALE_RANGE = (0.8, 1.2)
 
 
 @configclass
@@ -67,7 +64,7 @@ UIKA_CFG = UIKAArticulationCfg(
         joint_vel={".*": 0.0},
     ),
     actuators={
-        "hip_thigh": PaceDCMotorCfg(
+        "hip_thigh": DCMotorCfg(
             joint_names_expr=[".*_hip_joint", ".*_thigh_joint"],
             effort_limit=17.0,
             saturation_effort=17.0,
@@ -76,10 +73,8 @@ UIKA_CFG = UIKAArticulationCfg(
             damping=1.5,
             armature=0.0042,
             friction=0.0,
-            max_delay=UIKA_MOTOR_DELAY_STEPS,
-            delay_scale_range=UIKA_MOTOR_DELAY_SCALE_RANGE,
         ),
-        "calf": PaceDCMotorCfg(
+        "calf": DCMotorCfg(
             joint_names_expr=[".*_calf_joint"],
             effort_limit=31.7,
             saturation_effort=31.7,
@@ -88,8 +83,6 @@ UIKA_CFG = UIKAArticulationCfg(
             damping=1.5,
             armature=0.0042,
             friction=0.0,
-            max_delay=UIKA_MOTOR_DELAY_STEPS,
-            delay_scale_range=UIKA_MOTOR_DELAY_SCALE_RANGE,
         ),
     },
     # fmt: off

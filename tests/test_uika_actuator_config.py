@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
-def test_uika_actuators_keep_delay_but_match_may31_motor_constants():
+def test_uika_actuators_match_may31_motor_constants_without_delay():
     source = (
         Path(__file__).resolve().parents[1]
         / "source"
@@ -16,8 +16,10 @@ def test_uika_actuators_keep_delay_but_match_may31_motor_constants():
     assert "UIKA_JOINT_VISCOUS_DAMPING" not in source
     assert "UIKA_JOINT_FRICTION" not in source
     assert "UIKA_ENCODER_BIAS" not in source
-    assert "max_delay=UIKA_MOTOR_DELAY_STEPS" in source
-    assert "delay_scale_range=UIKA_MOTOR_DELAY_SCALE_RANGE" in source
+    assert "PaceDCMotorCfg" not in source
+    assert "UIKA_MOTOR_DELAY" not in source
+    assert "max_delay" not in source
+    assert "delay_scale_range" not in source
     assert "damping=1.5" in source
     assert "armature=0.0042" in source
     assert "friction=0.0" in source
