@@ -60,7 +60,26 @@ def test_uika_training_command_range_matches_may31_config():
     assert "lin_vel_x=(-1.0, 1.0), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-1.0, 1.0)" in source
 
 
-def test_uika_training_uses_generated_terrain_curriculum():
+def test_uika_flat_and_rough_tasks_are_registered_separately():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "tasks"
+        / "locomotion"
+        / "robots"
+        / "uika"
+        / "__init__.py"
+    ).read_text()
+
+    assert 'id="UIKA-Velocity"' in source
+    assert '"env_cfg_entry_point": f"{__name__}.velocity_env_cfg:RobotEnvCfg"' in source
+    assert 'id="UIKA-Velocity-Rough"' in source
+    assert '"env_cfg_entry_point": f"{__name__}.velocity_env_cfg:RoughRobotEnvCfg"' in source
+
+
+def test_uika_flat_training_uses_plane_without_terrain_curriculum():
     source = (
         Path(__file__).resolve().parents[1]
         / "source"
@@ -73,11 +92,34 @@ def test_uika_training_uses_generated_terrain_curriculum():
         / "velocity_env_cfg.py"
     ).read_text()
 
+    assert "class RobotSceneCfg" in source
+    assert 'terrain_type="plane"' in source
+    assert "class RobotEnvCfg" in source
+    assert "self.curriculum.terrain_levels = None" in source
+
+
+def test_uika_rough_training_uses_generated_terrain_curriculum_and_disables_heading():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "tasks"
+        / "locomotion"
+        / "robots"
+        / "uika"
+        / "velocity_env_cfg.py"
+    ).read_text()
+
+    assert "class RoughRobotSceneCfg" in source
+    assert "class RoughRobotEnvCfg" in source
     assert 'terrain_type="generator"' in source
     assert "terrain_generator=COBBLESTONE_ROAD_CFG" in source
     assert "max_init_terrain_level=5" in source
-    assert "terrain_type=\"plane\"" not in source
     assert "terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)" in source
+    assert "self.commands.base_velocity.heading_command = False" in source
+    assert "self.commands.base_velocity.rel_heading_envs = 0.0" in source
+    assert "self.commands.base_velocity.ranges.heading = None" in source
 
 
 def test_uika_uses_original_collision_urdf():

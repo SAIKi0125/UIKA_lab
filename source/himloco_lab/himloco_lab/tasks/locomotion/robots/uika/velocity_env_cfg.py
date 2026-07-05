@@ -87,20 +87,13 @@ class RobotSceneCfg(InteractiveSceneCfg):
 
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
-        terrain_type="generator",
-        terrain_generator=COBBLESTONE_ROAD_CFG,
-        max_init_terrain_level=5,
+        terrain_type="plane",
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
             restitution_combine_mode="multiply",
             static_friction=1.0,
             dynamic_friction=1.0,
-        ),
-        visual_material=sim_utils.MdlFileCfg(
-            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
-            project_uvw=True,
-            texture_scale=(0.25, 0.25),
         ),
         debug_vis=False,
     )
@@ -129,6 +122,31 @@ class RobotSceneCfg(InteractiveSceneCfg):
             intensity=750.0,
             texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
         ),
+    )
+
+
+@configclass
+class RoughRobotSceneCfg(RobotSceneCfg):
+    """Configuration for UIKA rough terrain training."""
+
+    terrain = TerrainImporterCfg(
+        prim_path="/World/ground",
+        terrain_type="generator",
+        terrain_generator=COBBLESTONE_ROAD_CFG,
+        max_init_terrain_level=5,
+        collision_group=-1,
+        physics_material=sim_utils.RigidBodyMaterialCfg(
+            friction_combine_mode="multiply",
+            restitution_combine_mode="multiply",
+            static_friction=1.0,
+            dynamic_friction=1.0,
+        ),
+        visual_material=sim_utils.MdlFileCfg(
+            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+            project_uvw=True,
+            texture_scale=(0.25, 0.25),
+        ),
+        debug_vis=False,
     )
 
 
@@ -635,6 +653,19 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
 
 @configclass
+class RoughRobotEnvCfg(RobotEnvCfg):
+    """Configuration for UIKA rough terrain velocity-tracking environment."""
+
+    scene: RoughRobotSceneCfg = RoughRobotSceneCfg(num_envs=4096, env_spacing=2.5)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.commands.base_velocity.heading_command = False
+        self.commands.base_velocity.rel_heading_envs = 0.0
+        self.commands.base_velocity.ranges.heading = None
+
+
+@configclass
 class RobotPlayEnvCfg(RobotEnvCfg):
     def __post_init__(self):
         super().__post_init__()
@@ -652,6 +683,26 @@ class RobotPlayEnvCfg(RobotEnvCfg):
         self.curriculum.command_levels_ang_vel = None
 
         self.commands.base_velocity.heading_command = False
+        self.commands.base_velocity.ranges = mdp.UniformThresholdVelocityCommandCfg.Ranges(
+            lin_vel_x=(1.0, 1.0), lin_vel_y=(-0.0, 0.0), ang_vel_z=(-0, 0),
+        )
+
+
+@configclass
+class RoughRobotPlayEnvCfg(RoughRobotEnvCfg):
+    def __post_init__(self):
+        super().__post_init__()
+        self.scene.num_envs = 64
+
+        self.scene.terrain.terrain_generator.num_cols = 10
+        self.scene.terrain.terrain_generator.curriculum = True
+        self.scene.terrain.max_init_terrain_level = 10
+
+        self.curriculum.command_levels_lin_vel = None
+        self.curriculum.command_levels_ang_vel = None
+
+        self.commands.base_velocity.heading_command = False
+        self.commands.base_velocity.rel_heading_envs = 0.0
         self.commands.base_velocity.ranges = mdp.UniformThresholdVelocityCommandCfg.Ranges(
             lin_vel_x=(1.0, 1.0), lin_vel_y=(-0.0, 0.0), ang_vel_z=(-0, 0),
         )
