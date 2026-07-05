@@ -3,9 +3,10 @@
 import os
 
 import isaaclab.sim as sim_utils
-from isaaclab.actuators import DCMotorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 from isaaclab.utils import configclass
+
+from .delayed_motor import DelayedDCMotorCfg
 
 UIKA_ASSETS_DIR = os.path.join(os.path.dirname(__file__), "uika")
 
@@ -64,7 +65,7 @@ UIKA_CFG = UIKAArticulationCfg(
         joint_vel={".*": 0.0},
     ),
     actuators={
-        "hip_thigh": DCMotorCfg(
+        "hip_thigh": DelayedDCMotorCfg(
             joint_names_expr=[".*_hip_joint", ".*_thigh_joint"],
             effort_limit=17.0,
             saturation_effort=17.0,
@@ -73,8 +74,10 @@ UIKA_CFG = UIKAArticulationCfg(
             damping=1.5,
             armature=0.0042,
             friction=0.0,
+            min_delay=5,
+            max_delay=7,
         ),
-        "calf": DCMotorCfg(
+        "calf": DelayedDCMotorCfg(
             joint_names_expr=[".*_calf_joint"],
             effort_limit=31.7,
             saturation_effort=31.7,
@@ -83,6 +86,8 @@ UIKA_CFG = UIKAArticulationCfg(
             damping=1.5,
             armature=0.0042,
             friction=0.0,
+            min_delay=5,
+            max_delay=7,
         ),
     },
     # fmt: off
