@@ -1,2 +1,2 @@
-from .commands import UniformLevelVelocityCommand, UniformThresholdVelocityCommand
-from .commands_cfg import UniformLevelVelocityCommandCfg, UniformThresholdVelocityCommandCfg
+from .commands import SpringJumpCommand, UniformLevelVelocityCommand, UniformThresholdVelocityCommand
+from .commands_cfg import SpringJumpCommandCfg, UniformLevelVelocityCommandCfg, UniformThresholdVelocityCommandCfg

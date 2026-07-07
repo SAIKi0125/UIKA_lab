@@ -26,7 +26,7 @@ gym.register(
     entry_point="himloco_lab.envs:HimlocoManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.velocity_env_cfg:RoughRobotEnvCfg",
+        "env_cfg_entry_point": f"{__name__}.rough_env_cfg:RoughRobotEnvCfg",
         "himloco_rsl_rl_cfg": f"himloco_lab.tasks.locomotion.agents.himloco_rsl_rl_cfg:UIKAPPORunnerCfg",
         "rsl_rl_cfg_entry_point": f"himloco_lab.tasks.locomotion.agents.rsl_rl_ppo_cfg:BasePPORunnerCfg",
     },
@@ -37,7 +37,27 @@ gym.register(
     entry_point="himloco_lab.envs:HimlocoManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.velocity_env_cfg:RoughRobotPlayEnvCfg",
+        "env_cfg_entry_point": f"{__name__}.rough_env_cfg:RoughRobotPlayEnvCfg",
         "himloco_rsl_rl_cfg": f"himloco_lab.tasks.locomotion.agents.himloco_rsl_rl_cfg:UIKAPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="UIKA-Takeoff",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.takeoff_env_cfg:TakeoffEnvCfg",
+        "rsl_rl_cfg_entry_point": f"himloco_lab.tasks.locomotion.agents.rsl_rl_takeoff_adapt_cfg:UIKATakeoffPPOAdaptRunnerCfg",
+    },
+)
+
+gym.register(
+    id="UIKA-Takeoff-Play",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.takeoff_env_cfg:TakeoffPlayEnvCfg",
+        "rsl_rl_cfg_entry_point": f"himloco_lab.tasks.locomotion.agents.rsl_rl_takeoff_adapt_cfg:UIKATakeoffPPOAdaptRunnerCfg",
     },
 )

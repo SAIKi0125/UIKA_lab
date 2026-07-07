@@ -1,7 +1,6 @@
 import math
 
 import isaaclab.sim as sim_utils
-import isaaclab.terrains as terrain_gen
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
@@ -15,70 +14,27 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 from himloco_lab.assets.uika import UIKA_CFG as ROBOT_CFG
 from himloco_lab.tasks.locomotion import mdp
-import himloco_lab.terrains as him_terrains
 
 UIKA_JOINT_NAMES = list(ROBOT_CFG.joint_sdk_names)
-
-COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
-    size=(8.0, 8.0),
-    border_width=25.0,
-    num_rows=10,
-    num_cols=20,
-    horizontal_scale=0.1,
-    vertical_scale=0.005,
-    slope_threshold=0.75,
-    difficulty_range=(0.0, 1.0),
-    use_cache=True,
-    sub_terrains={
-        "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
-            proportion=0.05,
-            slope_range=(0.0, 0.4),
-            platform_width=3.0,
-            border_width=0.0,
-        ),
-        "hf_pyramid_slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
-            proportion=0.05,
-            slope_range=(0.0, 0.4),
-            platform_width=3.0,
-            border_width=0.0,
-        ),
-        "hf_slope_with_noise": him_terrains.HfPyramidSlopeWithNoiseCfg(
-            proportion=0.2,
-            slope_range=(0.0, 0.4),
-            platform_width=3.0,
-            border_width=0.0,
-            noise_amplitude_range=(0.01, 0.08),
-            noise_step=0.005,
-            downsampled_scale=0.2,
-        ),
-        "pyramid_stairs": terrain_gen.MeshPyramidStairsTerrainCfg(
-            proportion=0.3,
-            step_height_range=(0.05, 0.23),
-            step_width=0.30,
-            platform_width=3.0,
-            border_width=0.0,
-        ),
-        "pyramid_stairs_inv": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
-            proportion=0.3,
-            step_height_range=(0.05, 0.23),
-            step_width=0.30,
-            platform_width=3.0,
-            border_width=0.0,
-        ),
-        "discrete_obstacles": him_terrains.HfDiscreteObstaclesTerrainCfg(
-            proportion=0.1,
-            max_height_range=(0.05, 0.15),
-            obstacle_size_range=(1.0, 2.0),
-            num_obstacles=20,
-            platform_width=3.0,
-        ),
-    },
-)
+UIKA_LOWER_JOINT_POS_TARGET = {
+    "FL_hip_joint": -0.40,
+    "FL_thigh_joint": 0.40,
+    "FL_calf_joint": 0.20,
+    "FR_hip_joint": 0.40,
+    "FR_thigh_joint": 0.40,
+    "FR_calf_joint": 0.20,
+    "RL_hip_joint": -0.40,
+    "RL_thigh_joint": 0.40,
+    "RL_calf_joint": 0.20,
+    "RR_hip_joint": 0.40,
+    "RR_thigh_joint": 0.40,
+    "RR_calf_joint": 0.20,
+}
 
 
 @configclass
@@ -122,31 +78,6 @@ class RobotSceneCfg(InteractiveSceneCfg):
             intensity=750.0,
             texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
         ),
-    )
-
-
-@configclass
-class RoughRobotSceneCfg(RobotSceneCfg):
-    """Configuration for UIKA rough terrain training."""
-
-    terrain = TerrainImporterCfg(
-        prim_path="/World/ground",
-        terrain_type="generator",
-        terrain_generator=COBBLESTONE_ROAD_CFG,
-        max_init_terrain_level=5,
-        collision_group=-1,
-        physics_material=sim_utils.RigidBodyMaterialCfg(
-            friction_combine_mode="multiply",
-            restitution_combine_mode="multiply",
-            static_friction=1.0,
-            dynamic_friction=1.0,
-        ),
-        visual_material=sim_utils.MdlFileCfg(
-            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
-            project_uvw=True,
-            texture_scale=(0.25, 0.25),
-        ),
-        debug_vis=False,
     )
 
 
@@ -278,12 +209,12 @@ class CommandsCfg:
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
         rel_standing_envs=0.02,
-        rel_heading_envs=1.0,
-        heading_command=True,
+        rel_heading_envs=0.0,
+        heading_command=False,
         heading_control_stiffness=0.5,
         debug_vis=True,
         ranges=mdp.UniformThresholdVelocityCommandCfg.Ranges(
-            lin_vel_x=(-1.0, 1.0), lin_vel_y=(-1.0, 1.0), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
+            lin_vel_x=(-1.0, 1.0), lin_vel_y=(-0.0, 0.0), ang_vel_z=(-1.0, 1.0)
         ),
     )
 
@@ -375,9 +306,10 @@ class RewardsCfg:
     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=0)
     base_height_l2 = RewTerm(
         func=mdp.base_height_l2,
-        weight=0.0,
+        weight=-5.0,
         params={
-            "target_height": 0.3,
+            # "target_height": 0.3357,
+            "target_height": 0.10,
             "asset_cfg": SceneEntityCfg("robot", body_names="base"),
             "sensor_cfg": SceneEntityCfg("base_height_scanner"),
         },
@@ -388,7 +320,7 @@ class RewardsCfg:
         weight=0,
         params={"asset_cfg": SceneEntityCfg("robot", body_names="base")},
     )
-    upward = RewTerm(func=mdp.upward, weight=0.25)
+    upward = RewTerm(func=mdp.upward, weight=0.5)
 
     # ---------------------------------------------------------------------
     # Joint regularization
@@ -403,23 +335,27 @@ class RewardsCfg:
     joint_vel_limits = RewTerm(func=mdp.joint_vel_limits, weight=0, params={"soft_ratio": 1.0})
     stand_still = RewTerm(
         func=mdp.stand_still,
-        weight=-2.0,
+        # weight=-2.0,
+        weight=-0.0,
         params={
             "command_name": "base_velocity",
             "command_threshold": 0.1,
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+            "target_joint_pos": UIKA_LOWER_JOINT_POS_TARGET,
         },
     )
 
     joint_pos_penalty = RewTerm(
         func=mdp.joint_pos_penalty,
         weight=-0.3,
+        # weight=-0.0,
         params={
             "command_name": "base_velocity",
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
             "stand_still_scale": 16.0,
             "velocity_threshold": 0.5,
             "command_threshold": 0.1,
+            "target_joint_pos": UIKA_LOWER_JOINT_POS_TARGET,
         },
     )
 
@@ -432,7 +368,7 @@ class RewardsCfg:
                 ["FR_(thigh|calf).*", "RL_(thigh|calf).*"],
                 ["FL_(thigh|calf).*", "RR_(thigh|calf).*"],
             ],
-            "use_default_offset": True,
+            "target_joint_pos": UIKA_LOWER_JOINT_POS_TARGET,
         },
     )
 
@@ -467,13 +403,23 @@ class RewardsCfg:
     # Main task rewards: track commanded planar velocity and yaw rate.
     track_lin_vel_xy = RewTerm(
         func=mdp.track_lin_vel_xy_exp,
-        weight=1.0,
+        weight=3.0,
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
     track_ang_vel_z = RewTerm(
         func=mdp.track_ang_vel_z_exp,
-        weight=0.5,
+        weight=1.5,
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
+    )
+    not_moving_when_commanded = RewTerm(
+        func=mdp.not_moving_when_commanded,
+        weight=0.0,
+        params={
+            "command_name": "base_velocity",
+            "velocity_threshold": 0.15,
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", body_names="base"),
+        },
     )
 
     # ---------------------------------------------------------------------
@@ -547,8 +493,8 @@ class RewardsCfg:
 
     feet_height_body = RewTerm(
         func=mdp.feet_height_body,
-        weight=-5.0,
-        # weight=0.0,
+        # weight=-5.0,
+        weight=0.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
             "target_height": -0.23,
@@ -653,19 +599,6 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
 
 @configclass
-class RoughRobotEnvCfg(RobotEnvCfg):
-    """Configuration for UIKA rough terrain velocity-tracking environment."""
-
-    scene: RoughRobotSceneCfg = RoughRobotSceneCfg(num_envs=4096, env_spacing=2.5)
-
-    def __post_init__(self):
-        super().__post_init__()
-        self.commands.base_velocity.heading_command = False
-        self.commands.base_velocity.rel_heading_envs = 0.0
-        self.commands.base_velocity.ranges.heading = None
-
-
-@configclass
 class RobotPlayEnvCfg(RobotEnvCfg):
     def __post_init__(self):
         super().__post_init__()
@@ -683,26 +616,6 @@ class RobotPlayEnvCfg(RobotEnvCfg):
         self.curriculum.command_levels_ang_vel = None
 
         self.commands.base_velocity.heading_command = False
-        self.commands.base_velocity.ranges = mdp.UniformThresholdVelocityCommandCfg.Ranges(
-            lin_vel_x=(1.0, 1.0), lin_vel_y=(-0.0, 0.0), ang_vel_z=(-0, 0),
-        )
-
-
-@configclass
-class RoughRobotPlayEnvCfg(RoughRobotEnvCfg):
-    def __post_init__(self):
-        super().__post_init__()
-        self.scene.num_envs = 64
-
-        self.scene.terrain.terrain_generator.num_cols = 10
-        self.scene.terrain.terrain_generator.curriculum = True
-        self.scene.terrain.max_init_terrain_level = 10
-
-        self.curriculum.command_levels_lin_vel = None
-        self.curriculum.command_levels_ang_vel = None
-
-        self.commands.base_velocity.heading_command = False
-        self.commands.base_velocity.rel_heading_envs = 0.0
         self.commands.base_velocity.ranges = mdp.UniformThresholdVelocityCommandCfg.Ranges(
             lin_vel_x=(1.0, 1.0), lin_vel_y=(-0.0, 0.0), ang_vel_z=(-0, 0),
         )

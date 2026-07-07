@@ -56,12 +56,14 @@ from datetime import datetime
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_yaml
+from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
 
 import himloco_lab.tasks  # noqa: F401
 from himloco_lab.rsl_rl import HIMOnPolicyRunner, HimlocoVecEnvWrapper
 from himloco_lab.rsl_rl.config import HIMOnPolicyRunnerCfg
 from isaaclab_tasks.utils.hydra import hydra_task_config
 from himloco_lab.utils import export_deploy_cfg
+from rsl_rl.runners import OnPolicyRunner
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -70,7 +72,7 @@ torch.backends.cudnn.benchmark = False
 
 
 @hydra_task_config(args_cli.task, args_cli.agent)
-def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: HIMOnPolicyRunnerCfg):
+def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: HIMOnPolicyRunnerCfg | RslRlOnPolicyRunnerCfg):
     """Train with HimLoco RSL-RL agent."""
     # override configurations with non-hydra CLI arguments
     agent_cfg = cli_args.update_himloco_rsl_rl_cfg(agent_cfg, args_cli)
@@ -95,8 +97,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: HIMOnPolicyRunnerCfg):
         env_cfg.seed = seed
         agent_cfg.seed = seed
 
+    use_himloco_runner = isinstance(agent_cfg, HIMOnPolicyRunnerCfg)
+
     # specify directory for logging experiments
-    log_root_path = os.path.join("logs", "himloco_rsl_rl", agent_cfg.experiment_name)
+    if use_himloco_runner:
+        log_root_path = os.path.join("logs", "himloco_rsl_rl", agent_cfg.experiment_name)
+    else:
+        log_root_path = os.path.join("logs/rsl_rl", agent_cfg.experiment_name)
     log_root_path = os.path.abspath(log_root_path)
     print(f"[INFO] Logging experiment in directory: {log_root_path}")
     # specify directory for logging runs: {time-stamp}_{run_name}
@@ -113,23 +120,29 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: HIMOnPolicyRunnerCfg):
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg)
 
-    # wrap around environment for HimLoco RSL-RL
-    env = HimlocoVecEnvWrapper(
-        env,
-        history_length=agent_cfg.history_length,
-        privileged_history_length=agent_cfg.privileged_history_length
-    )
+    if use_himloco_runner:
+        # wrap around environment for HimLoco RSL-RL
+        env = HimlocoVecEnvWrapper(
+            env,
+            history_length=agent_cfg.history_length,
+            privileged_history_length=agent_cfg.privileged_history_length,
+        )
 
-    print(f"[INFO] Environment wrapped successfully")
-    print(f"[INFO] num_envs: {env.num_envs}")
-    print(f"[INFO] num_one_step_obs: {env.num_one_step_obs}")
-    print(f"[INFO] history_length: {env.history_length}")
-    print(f"[INFO] num_obs (total): {env.num_obs}")
-    if env.num_one_step_privileged_obs is not None:
-        print(f"[INFO] num_one_step_privileged_obs: {env.num_one_step_privileged_obs}")
-        print(f"[INFO] privileged_history_length: {env.privileged_history_length}")
-        print(f"[INFO] num_privileged_obs (total): {env.num_privileged_obs}")
-    print(f"[INFO] num_actions: {env.num_actions}")
+        print(f"[INFO] Environment wrapped successfully")
+        print(f"[INFO] num_envs: {env.num_envs}")
+        print(f"[INFO] num_one_step_obs: {env.num_one_step_obs}")
+        print(f"[INFO] history_length: {env.history_length}")
+        print(f"[INFO] num_obs (total): {env.num_obs}")
+        if env.num_one_step_privileged_obs is not None:
+            print(f"[INFO] num_one_step_privileged_obs: {env.num_one_step_privileged_obs}")
+            print(f"[INFO] privileged_history_length: {env.privileged_history_length}")
+            print(f"[INFO] num_privileged_obs (total): {env.num_privileged_obs}")
+        print(f"[INFO] num_actions: {env.num_actions}")
+    else:
+        # takeoff-adaptation uses standard RSL-RL instead of HimLoco networks.
+        env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+        print(f"[INFO] Standard RSL-RL environment wrapped successfully")
+        print(f"[INFO] num_envs: {env.num_envs}")
 
     # save resume path before creating a new log_dir
     if agent_cfg.resume:
@@ -137,8 +150,18 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: HIMOnPolicyRunnerCfg):
         from isaaclab_tasks.utils import get_checkpoint_path
         resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
 
-    # create runner from HimLoco RSL-RL
-    runner = HIMOnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    # create runner
+    if use_himloco_runner:
+        runner = HIMOnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    else:
+        runner_cfg = agent_cfg.to_dict()
+        for model_key in ("actor", "critic"):
+            model_cfg = runner_cfg.get(model_key)
+            if model_cfg is None:
+                continue
+            for deprecated_key in ("stochastic", "init_noise_std", "noise_std_type", "state_dependent_std"):
+                model_cfg.pop(deprecated_key, None)
+        runner = OnPolicyRunner(env, runner_cfg, log_dir=log_dir, device=agent_cfg.device)
     
     # load the checkpoint if resuming
     if agent_cfg.resume:
@@ -150,13 +173,14 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: HIMOnPolicyRunnerCfg):
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
     dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
     
-    # Export deployment configuration with history_length and use_encoder flag
-    export_deploy_cfg(
-        env.unwrapped, 
-        log_dir,
-        history_length=agent_cfg.history_length,
-        use_encoder=True  # HimLoco uses dual network architecture
-    )
+    if use_himloco_runner:
+        # Export deployment configuration with history_length and use_encoder flag
+        export_deploy_cfg(
+            env.unwrapped,
+            log_dir,
+            history_length=agent_cfg.history_length,
+            use_encoder=True,  # HimLoco uses dual network architecture
+        )
      
     shutil.copy(
         inspect.getfile(env_cfg.__class__),

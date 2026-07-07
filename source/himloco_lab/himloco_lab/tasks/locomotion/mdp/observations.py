@@ -20,6 +20,12 @@ def base_external_force(
     return asset.permanent_wrench_composer.composed_force_as_torch[:, asset_cfg.body_ids, :].squeeze(1).clone()
 
 
+def base_height(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """Root height in world frame."""
+    asset: Articulation | RigidObject = env.scene[asset_cfg.name]
+    return asset.data.root_pos_w[:, 2:3]
+
+
 def height_scan_clip(
     env: ManagerBasedRLEnv, 
     sensor_cfg: SceneEntityCfg,
