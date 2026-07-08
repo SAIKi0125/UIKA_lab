@@ -3,6 +3,9 @@ from __future__ import annotations
 import torch
 from typing import TYPE_CHECKING
 
+from isaaclab.sensors import ContactSensor
+from isaaclab.utils.math import euler_xyz_from_quat
+
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
     from isaaclab.managers import SceneEntityCfg
@@ -24,6 +27,19 @@ def base_height(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tens
     """Root height in world frame."""
     asset: Articulation | RigidObject = env.scene[asset_cfg.name]
     return asset.data.root_pos_w[:, 2:3]
+
+
+def base_euler_xyz(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """Root roll, pitch, yaw in XYZ convention."""
+    asset: Articulation | RigidObject = env.scene[asset_cfg.name]
+    return torch.stack(euler_xyz_from_quat(asset.data.root_quat_w), dim=-1)
+
+
+def contact_mask(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, threshold: float = 5.0) -> torch.Tensor:
+    """Binary contact mask for selected bodies from world-frame z contact force."""
+    sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    forces_z = sensor.data.net_forces_w[:, sensor_cfg.body_ids, 2]
+    return (forces_z > float(threshold)).float()
 
 
 def height_scan_clip(

@@ -52,7 +52,9 @@
 - `base_height_flight`: `_sj_was_in_flight & ~_sj_has_jumped`，飞行中高度奖励。
 - `base_height_flight` / `base_height_stance_sj` 的 active reward 结构按 SpringJump，但高度数值保留 UIKA 物理尺寸：`target_height=0.50`、`stance_target=0.3357`、`setting_target=0.24`；不要为了逐字对齐 GO2 改成 GO2 高度。
 - `land_pos`: `_sj_has_jumped & upright & (max_height > min_height)`；目标落点使用固定 reward 参数 `target_xy=(1.0, 0.0)`，计算为 `_sj_init_xy + target_xy`，不要从 command 读取 xy。
-- critic 不传 landing position；critic active obs 只包含 base/joint/action、1 维 jumpflag command、has_jumped 等状态。
+- critic 不传 landing position；除 command 从原生 3 维改为 1 维 `jumpflag` 外，critic 按原生 SpringJump 顺序对齐：
+  `velocity_commands(1), joint_pos_rel(12), joint_pos_abs(12), joint_vel_rel(12), last_action(12), base_lin_vel(3), base_ang_vel(3), base_euler_xyz(3), contact_mask(4), has_jumped(1)`。
+  单帧 63 维，`history_length=3` 后为 189 维。
 - `tracking_lin_vel_jump`: `_sj_was_in_flight & ~_sj_has_jumped`，只在飞行未落地阶段按固定 `target_forward_velocity=1.6` 奖励，不再从 command x 读取目标速度。
 - `line_vel_stance`: `_sj_has_jumped`，落地后惩罚水平速度用于站稳。
 - `foot_clearance_jump`: `_sj_was_in_flight & ~_sj_has_jumped`，飞行未落地阶段惩罚脚部高度偏差。

@@ -57,10 +57,24 @@ def test_uika_takeoff_env_has_actor_history_critic_obs_and_spring_jump_rewards()
     assert "class PrivilegedTargetCfg" not in source
     assert "func=mdp.base_lin_vel" in source
     critic_source = source.split("class CriticCfg", 1)[1].split("critic:", 1)[0]
-    assert "velocity_commands = ObsTerm(" in critic_source
-    assert "func=mdp.generated_commands" in critic_source
+    expected_critic_order = [
+        "velocity_commands = ObsTerm(",
+        "joint_pos_rel = ObsTerm(",
+        "joint_pos_abs = ObsTerm(",
+        "joint_vel_rel = ObsTerm(",
+        "last_action = ObsTerm(",
+        "base_lin_vel = ObsTerm(",
+        "base_ang_vel = ObsTerm(",
+        "base_euler_xyz = ObsTerm(",
+        "contact_mask = ObsTerm(",
+        "has_jumped = ObsTerm(",
+    ]
+    indices = [critic_source.index(term) for term in expected_critic_order]
+    assert indices == sorted(indices)
     assert "landing_xy_from_takeoff" not in critic_source
     assert "landing_xy_from_start" not in critic_source
+    assert "base_height = ObsTerm(" not in critic_source
+    assert "projected_gravity = ObsTerm(" not in critic_source
 
     for reward_name in [
         "before_setting",

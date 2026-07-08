@@ -201,12 +201,16 @@ class ObservationsCfg:
 
     @configclass
     class CriticCfg(ObsGroup):
-        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, scale=2.0, clip=(-100, 100))
-        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.25, clip=(-100, 100))
-        base_height = ObsTerm(func=mdp.base_height, params={"asset_cfg": SceneEntityCfg("robot")}, clip=(-100, 100))
-        projected_gravity = ObsTerm(func=mdp.projected_gravity, clip=(-100, 100))
+        velocity_commands = ObsTerm(
+            func=mdp.generated_commands, clip=(-100, 100), params={"command_name": "base_velocity"}
+        )
         joint_pos_rel = ObsTerm(
             func=mdp.joint_pos_rel,
+            params={"asset_cfg": SceneEntityCfg("robot", joint_names=UIKA_JOINT_NAMES, preserve_order=True)},
+            clip=(-100, 100),
+        )
+        joint_pos_abs = ObsTerm(
+            func=mdp.joint_pos,
             params={"asset_cfg": SceneEntityCfg("robot", joint_names=UIKA_JOINT_NAMES, preserve_order=True)},
             clip=(-100, 100),
         )
@@ -217,8 +221,15 @@ class ObservationsCfg:
             clip=(-100, 100),
         )
         last_action = ObsTerm(func=mdp.last_action, clip=(-100, 100))
-        velocity_commands = ObsTerm(
-            func=mdp.generated_commands, clip=(-100, 100), params={"command_name": "base_velocity"}
+        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, scale=2.0, clip=(-100, 100))
+        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.25, clip=(-100, 100))
+        base_euler_xyz = ObsTerm(
+            func=mdp.base_euler_xyz, params={"asset_cfg": SceneEntityCfg("robot")}, clip=(-100, 100)
+        )
+        contact_mask = ObsTerm(
+            func=mdp.contact_mask,
+            params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"), "threshold": 5.0},
+            clip=(-100, 100),
         )
         has_jumped = ObsTerm(
             func=mdp.has_jumped_obs,
