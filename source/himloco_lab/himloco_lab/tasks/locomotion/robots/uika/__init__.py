@@ -48,7 +48,7 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{__name__}.takeoff_env_cfg:TakeoffEnvCfg",
-        "rsl_rl_cfg_entry_point": f"himloco_lab.tasks.locomotion.agents.rsl_rl_takeoff_adapt_cfg:UIKATakeoffPPOAdaptRunnerCfg",
+        "rsl_rl_cfg_entry_point": f"himloco_lab.tasks.locomotion.agents.rsl_rl_takeoff_cfg:UIKATakeoffPPORunnerCfg",
     },
 )
 
@@ -58,6 +58,6 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{__name__}.takeoff_env_cfg:TakeoffPlayEnvCfg",
-        "rsl_rl_cfg_entry_point": f"himloco_lab.tasks.locomotion.agents.rsl_rl_takeoff_adapt_cfg:UIKATakeoffPPOAdaptRunnerCfg",
+        "rsl_rl_cfg_entry_point": f"himloco_lab.tasks.locomotion.agents.rsl_rl_takeoff_cfg:UIKATakeoffPPORunnerCfg",
     },
 )

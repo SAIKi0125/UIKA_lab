@@ -239,8 +239,7 @@ def test_uika_rough_cfg_exposes_all_reward_weights_for_tuning():
     assert "def _configure_rewards_for_rough(self):" in rough_source
     for reward_name in reward_names:
         assert f"self.rewards.{reward_name}.weight =" in rough_source
-    assert "not_moving_when_commanded = RewTerm(" in velocity_source
-    assert "func=mdp.not_moving_when_commanded" in velocity_source
+    assert "not_moving_when_commanded = None" in velocity_source
     assert 'self.rewards.not_moving_when_commanded.params["velocity_threshold"] = 0.15' in rough_source
 
 
@@ -289,17 +288,17 @@ def test_uika_velocity_default_pose_rewards_target_lower_pose():
     ).read_text()
 
     expected_targets = {
-        "FL_hip_joint": -0.40,
-        "FL_thigh_joint": 0.40,
+        "FL_hip_joint": -0.50,
+        "FL_thigh_joint": 0.30,
         "FL_calf_joint": 0.20,
-        "FR_hip_joint": 0.40,
-        "FR_thigh_joint": 0.40,
+        "FR_hip_joint": 0.50,
+        "FR_thigh_joint": 0.30,
         "FR_calf_joint": 0.20,
-        "RL_hip_joint": -0.40,
-        "RL_thigh_joint": 0.40,
+        "RL_hip_joint": -0.50,
+        "RL_thigh_joint": 0.30,
         "RL_calf_joint": 0.20,
-        "RR_hip_joint": 0.40,
-        "RR_thigh_joint": 0.40,
+        "RR_hip_joint": 0.50,
+        "RR_thigh_joint": 0.30,
         "RR_calf_joint": 0.20,
     }
 
@@ -311,6 +310,114 @@ def test_uika_velocity_default_pose_rewards_target_lower_pose():
     assert "asset.data.default_joint_pos" in rewards_source
     assert "target_joint_pos is not None" in rewards_source
     assert "reward = mdp.joint_deviation_l1(env, asset_cfg)" not in rewards_source
+
+
+def test_uika_velocity_base_height_target_is_twenty_two_cm():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "tasks"
+        / "locomotion"
+        / "robots"
+        / "uika"
+        / "velocity_env_cfg.py"
+    ).read_text()
+    base_height_source = source.split("base_height_l2 = RewTerm(", 1)[1].split("body_lin_acc_l2", 1)[0]
+
+    assert '"target_height": 0.22' in base_height_source
+
+
+def test_uika_velocity_disabled_rewards_are_none_to_avoid_registered_zero_terms():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "tasks"
+        / "locomotion"
+        / "robots"
+        / "uika"
+        / "velocity_env_cfg.py"
+    ).read_text()
+
+    disabled_reward_names = [
+        "is_terminated",
+        "flat_orientation_l2",
+        "body_lin_acc_l2",
+        "joint_vel_l2",
+        "joint_vel_limits",
+        "stand_still",
+        "contact_forces",
+        "not_moving_when_commanded",
+        "feet_air_time",
+        "feet_air_time_variance",
+        "feet_contact",
+        "feet_stumble",
+        "feet_height",
+        "feet_height_body",
+        "feet_gait",
+    ]
+
+    for reward_name in disabled_reward_names:
+        assert f"{reward_name} = None" in source
+
+
+def test_uika_velocity_action_offset_uses_lower_pose():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "tasks"
+        / "locomotion"
+        / "robots"
+        / "uika"
+        / "velocity_env_cfg.py"
+    ).read_text()
+    action_source = source.split("class ActionsCfg:", 1)[1].split("class ObservationsCfg:", 1)[0]
+
+    assert "offset=UIKA_LOWER_JOINT_POS_TARGET" in action_source
+    assert "use_default_offset=False" in action_source
+    assert "use_default_offset=True" not in action_source
+
+
+def test_uika_velocity_too_low_termination_matches_takeoff():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "tasks"
+        / "locomotion"
+        / "robots"
+        / "uika"
+        / "velocity_env_cfg.py"
+    ).read_text()
+    termination_source = source.split("class TerminationsCfg:", 1)[1].split("class CurriculumCfg:", 1)[0]
+
+    assert "too_low = DoneTerm(" in termination_source
+    assert "func=mdp.is_too_low" in termination_source
+    assert '"threshold": 0.15' in termination_source
+    assert "SceneEntityCfg(\"robot\")" in termination_source
+    assert "root_height_below_minimum" not in termination_source
+    assert "minimum_height" not in termination_source
+    assert "time_out=True" not in termination_source.split("too_low = DoneTerm(", 1)[1].split(")", 1)[0]
+
+
+def test_deploy_export_preserves_resolved_non_default_action_offset():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "utils"
+        / "export_deploy_cfg.py"
+    ).read_text()
+
+    assert "term_cfg.offset = action_term._offset[0].detach().cpu().numpy().tolist()" in source
+    assert "term_cfg.offset = [0.0 for _ in range(action_term.action_dim)]" not in source
 
 
 def test_uika_uses_original_collision_urdf():

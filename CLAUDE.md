@@ -34,6 +34,37 @@
 - action_scale: 0.25
 - 关节限位已验证，所有default_joint_pos在限位范围内
 
+### UIKA Takeoff / SpringJump 门控记忆
+- takeoff 分支以 SpringJump 定点跳为基准；HuangCang takeoff 只作参考，不作为最终 reward 权重标准。
+- takeoff 不修改 robot default joint pose；`robot = ROBOT_CFG.replace(...)`，action=0、reset dof、`before_setting`、`dof_pos`、`dof_hip_pos` 都以 UIKA 资产默认站姿为基准，和 SpringJump 使用 `default_joint_angles` 的结构一致。
+- takeoff 不使用 adaptation 网络；当前 runner 是 `rsl_rl_takeoff_cfg:UIKATakeoffPPORunnerCfg`，普通 RSL-RL MLP actor-critic，actor 输入 `actor_history` 10 帧历史，critic 输入 `critic` 3 帧历史；仓库中不应再引用 `rsl_rl_takeoff_adapt_cfg`、`takeoff_adapt_model`、`privileged_target` 或 `adaptation_loss_coef`。
+- 命令 `base_velocity` 是 3 维: `[target_x, target_y, jump_flag]`。前两维是落点目标，不是连续前进速度命令。
+- `jump_flag == 0.0`: 起跳前准备/下蹲阶段。
+- `jump_flag == 1.0`: 起跳触发后阶段。
+- `_sj_was_in_flight`: 曾经四足离地，条件是 `all_air & fresh & (jump_flag == 1.0)` 后保持为 True。
+- `_sj_last_contact_xy` / `_sj_takeoff_xy`: 保留给 critic 的 `landing_xy_from_takeoff` 观测使用；当前 active `land_pos` reward 已按原生 SpringJump 使用 `_sj_init_xy + command_xy`，不是 takeoff xy。
+- `_sj_has_jumped`: 已经飞行后再次接触地面，条件是 `_sj_was_in_flight & any_contact & ~_sj_has_jumped & fresh`。
+- `_sj_landing_xy`: 只在 `just_landed` 时记录当前 root xy。
+- 随机向上辅助冲量只在 `jump_flag == 1.0 & ~_sj_push_applied & ~_sj_has_jumped & fresh` 候选时触发；训练范围 `(0.5, 1.2)`、初始概率 `0.8`、`1200` step 线性衰减；Play 中 `push_initial_prob=0.0` 禁用推动。
+- `before_setting`: `jump_flag == 0.0`，奖励接近 robot default joint pose，不单独传下蹲 target。
+- `line_z`: `~_sj_has_jumped & jump_flag == 1.0`，奖励向上速度。
+- `flight`: `_sj_was_in_flight`，曾离地后生效。
+- `base_height_flight`: `_sj_was_in_flight & ~_sj_has_jumped`，飞行中高度奖励。
+- `base_height_flight` / `base_height_stance_sj` 的 active reward 结构按 SpringJump，但高度数值保留 UIKA 物理尺寸：`target_height=0.50`、`stance_target=0.3357`、`setting_target=0.24`；不要为了逐字对齐 GO2 改成 GO2 高度。
+- `land_pos`: `_sj_has_jumped & upright & (max_height > min_height)`；目标落点按原生 SpringJump 使用 `_sj_init_xy + command_xy`。`upright` 在 Isaac Lab 中用 `sum(abs(projected_gravity_b[:2])) < 0.6` 表达，这是环境表示差异，不再为了逐字一致改成 Euler。
+- critic 使用 `landing_xy_from_takeoff`，返回 `landing_or_current_xy - _sj_takeoff_xy`；不要再用 reset 初始位置作为落点基准。
+- `tracking_lin_vel_jump`: `_sj_was_in_flight & ~_sj_has_jumped`，只在飞行未落地阶段按目标 x 速度奖励。
+- `line_vel_stance`: `_sj_has_jumped`，落地后惩罚水平速度用于站稳。
+- `foot_clearance_jump`: `_sj_was_in_flight & ~_sj_has_jumped`，飞行未落地阶段惩罚脚部高度偏差。
+- 当前 active reward 不启用 `line_vel_x_setting`、`line_vel_y_setting`、`dof_pos_penalty_prepare_sj`，因为它们不是原生 SpringJump reward 表。
+- `dof_pos_penalty_sj`: 无 jump 阶段门控，全程惩罚偏离默认关节姿态，和 SpringJump 原版一致。
+- `dof_hip_pos_penalty_sj`: 无 jump 阶段门控，全程惩罚 hip 偏离默认姿态，和 SpringJump 原版一致。
+- `action_rate_l2_sj` 函数里门控为 `jump_flag == 1.0 & ~_sj_has_jumped` 时用 `jump_action_rate_scale` 缩放；当前 active takeoff reward 使用的是 SpringJump 基准 `action_rate_l2`，不是 `action_rate_l2_sj`。
+- `lin_vel_z_stance`、`stand_still_crouch_setting`、`stand_still_setting` 函数保留为 HuangCang 参考函数；当前 active takeoff reward 表未启用。
+- `successful_jump_sj` 函数保留但 active takeoff reward 表已删除，当前训练不使用一次性成功奖励。
+- SpringJump 通用惩罚 `ang_vel_xy`、`torques`、`joint_pos_limits`、`dof_vel_limits`、`dof_vel`、`collision`、`action_rate_l2`、`feet_contact_forces` 没有 jump 阶段门控，按每步通用惩罚生效。
+- termination 结构按 SpringJump：timeout、base contact、too low；当前 too low 阈值按用户要求对齐 SpringJump 为 `0.15`。
+
 ## 项目结构
 - 核心代码: `source/himloco_lab/himloco_lab/`
 - 机器人定义: `assets/` — `assets/uika.py` 定义 `UIKAArticulationCfg` 和 `DCMotorCfg`，`assets/uika/` 存放 URDF 和 mesh

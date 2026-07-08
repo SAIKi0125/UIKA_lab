@@ -9,7 +9,7 @@ def _read(relative: str) -> str:
     return (SRC / relative).read_text()
 
 
-def test_uika_takeoff_tasks_are_registered_with_standard_rsl_rl_adaptation_runner():
+def test_uika_takeoff_tasks_are_registered_with_standard_rsl_rl_runner():
     source = _read("tasks/locomotion/robots/uika/__init__.py")
 
     assert 'id="UIKA-Takeoff"' in source
@@ -19,7 +19,7 @@ def test_uika_takeoff_tasks_are_registered_with_standard_rsl_rl_adaptation_runne
     assert "himloco_rsl_rl_cfg" not in source.split('id="UIKA-Takeoff"')[1].split(")", 1)[0]
     assert (
         '"rsl_rl_cfg_entry_point": '
-        'f"himloco_lab.tasks.locomotion.agents.rsl_rl_takeoff_adapt_cfg:UIKATakeoffPPOAdaptRunnerCfg"'
+        'f"himloco_lab.tasks.locomotion.agents.rsl_rl_takeoff_cfg:UIKATakeoffPPORunnerCfg"'
     ) in source
 
 
@@ -41,23 +41,23 @@ def test_spring_jump_command_uses_my_unitree_three_channel_target_jump_flag_sema
     assert "setting_frame_range: tuple[int, int] = (50, 60)" in cfg_source
 
 
-def test_uika_takeoff_env_has_actor_history_privileged_target_and_spring_jump_rewards():
+def test_uika_takeoff_env_has_actor_history_critic_obs_and_spring_jump_rewards():
     source = _read("tasks/locomotion/robots/uika/takeoff_env_cfg.py")
 
     assert "class TakeoffEnvCfg" in source
     assert "episode_length_s = 5.0" in source
     assert "base_velocity = mdp.SpringJumpCommandCfg" in source
     assert "actor_history: ActorHistoryCfg = ActorHistoryCfg()" in source
+    assert "class ActorHistoryCfg" in source
     assert "history_length = 10" in source
-    assert "privileged_target: PrivilegedTargetCfg = PrivilegedTargetCfg()" in source
+    assert "privileged_target: PrivilegedTargetCfg = PrivilegedTargetCfg()" not in source
+    assert "class PrivilegedTargetCfg" not in source
     assert "func=mdp.base_lin_vel" in source
     critic_source = source.split("class CriticCfg", 1)[1].split("critic:", 1)[0]
     assert "velocity_commands = ObsTerm(" in critic_source
     assert "func=mdp.generated_commands" in critic_source
-    assert "func=mdp.landing_xy_from_start" in critic_source
-    privileged_target_source = source.split("class PrivilegedTargetCfg", 1)[1].split("privileged_target:", 1)[0]
-    assert "func=mdp.landing_xy_from_start" in privileged_target_source
-    assert "func=mdp.base_height" not in privileged_target_source
+    assert "func=mdp.landing_xy_from_takeoff" in critic_source
+    assert "func=mdp.landing_xy_from_start" not in critic_source
 
     for reward_name in [
         "before_setting",
@@ -71,6 +71,19 @@ def test_uika_takeoff_env_has_actor_history_privileged_target_and_spring_jump_re
     ]:
         assert f"{reward_name} = RewTerm(" in source
     assert "successful_jump_sj" not in source
+    assert "line_vel_x_setting = RewTerm(" not in source
+    assert "line_vel_y_setting = RewTerm(" not in source
+    assert "dof_pos_penalty_prepare_sj = RewTerm(" not in source
+
+
+def test_uika_takeoff_land_pos_uses_spring_jump_reset_xy_reward_logic():
+    reward_source = _read("tasks/locomotion/mdp/spring_jump.py")
+    reset_source = reward_source.split("def spring_jump_state_reset", 1)[1].split("def is_too_low", 1)[0]
+    land_pos_source = reward_source.split("def land_pos", 1)[1].split("def successful_jump_sj", 1)[0]
+
+    assert "env._sj_init_xy[env_ids] = asset.data.root_pos_w[env_ids, :2]" in reset_source
+    assert "target_xy = env._sj_init_xy + cmd[:, :2]" in land_pos_source
+    assert "target_xy = env._sj_takeoff_xy + cmd[:, :2]" not in land_pos_source
 
 
 def test_uika_takeoff_uses_original_spring_jump_generic_penalties():
@@ -112,11 +125,10 @@ def test_uika_takeoff_uses_original_spring_jump_generic_penalties():
         assert func_name in reward_source
 
 
-def test_uika_takeoff_actor_history_has_no_dummy_ball_and_command_is_last_for_takeoff_adapt_model():
+def test_uika_takeoff_actor_history_has_no_dummy_ball_and_command_is_last_for_plain_actor():
     source = _read("tasks/locomotion/robots/uika/takeoff_env_cfg.py")
     obs_source = _read("tasks/locomotion/mdp/observations.py")
-    runner_source = _read("tasks/locomotion/agents/rsl_rl_takeoff_adapt_cfg.py")
-    model_source = _read("tasks/locomotion/agents/takeoff_adapt_model.py")
+    runner_source = _read("tasks/locomotion/agents/rsl_rl_takeoff_cfg.py")
 
     policy_source = source.split("class PolicyCfg", 1)[1].split("def __post_init__", 1)[0]
     expected_order = [
@@ -132,81 +144,109 @@ def test_uika_takeoff_actor_history_has_no_dummy_ball_and_command_is_last_for_ta
     assert indices == sorted(indices)
     assert "dummy_ball" not in policy_source
     assert "zero_observation" not in obs_source
-    assert "TakeoffMlpAdaptModel" in model_source
-    assert "self.proprioception_dim = int(self.obs_per_step - self.cmd_dim)" in model_source
-    assert "cmd = x[:, -1, self.proprioception_dim : self.proprioception_dim + self.cmd_dim]" in model_source
-    assert "catch_estimator" not in model_source
-    assert "cmd_dim=3" in runner_source
-    assert 'class_name="himloco_lab.tasks.locomotion.agents.takeoff_adapt_model:TakeoffMlpAdaptModel"' in runner_source
+    assert "RslRlMLPModelCfg" in runner_source
+    assert "RslRlMlpAdaptModelCfg" not in runner_source
+    assert "takeoff_adapt_model" not in runner_source
     assert "ball_dim" not in runner_source
     assert "catch_target_dim" not in runner_source
 
 
-def test_uika_takeoff_uses_confirmed_crouch_pose_for_reset_and_before_setting():
+def test_uika_takeoff_uses_robot_default_pose_for_action_zero_reset_and_before_setting():
     source = _read("tasks/locomotion/robots/uika/takeoff_env_cfg.py")
+    asset_source = _read("assets/uika.py")
 
-    expected_angles = {
-        "FL_hip_joint": "-0.78",
-        "FL_thigh_joint": "0.40",
-        "FL_calf_joint": "0.20",
-        "FR_hip_joint": "0.78",
-        "FR_thigh_joint": "0.40",
-        "FR_calf_joint": "0.20",
-        "RL_hip_joint": "-0.78",
-        "RL_thigh_joint": "-0.05",
-        "RL_calf_joint": "0.20",
-        "RR_hip_joint": "0.78",
-        "RR_thigh_joint": "-0.05",
-        "RR_calf_joint": "0.20",
-    }
-
-    for joint_name, angle in expected_angles.items():
-        assert f'"{joint_name}": {angle}' in source
-    assert '"target_joint_angles": TAKEOFF_CROUCH_JOINT_ANGLES' in source
+    assert "TAKEOFF_CROUCH_JOINT_ANGLES" not in source
+    assert "TAKEOFF_ROBOT_CFG" not in source
+    assert "reset_to_crouch_pose" not in source
+    assert 'robot: ArticulationCfg = ROBOT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")' in source
+    assert '"FL_thigh_joint": 0.05' in asset_source
+    assert '"FL_calf_joint": 0.70' in asset_source
+    before_setting_source = source.split("before_setting = RewTerm(", 1)[1].split("line_z", 1)[0]
+    assert "target_joint_angles" not in before_setting_source
 
 
 def test_uika_takeoff_setting_height_is_confirmed_pre_jump_height():
     source = _read("tasks/locomotion/robots/uika/takeoff_env_cfg.py")
 
+    assert '"target_height": 0.50' in source
+    assert '"stance_target": 0.3357' in source
     assert '"setting_target": 0.24' in source
 
 
-def test_uika_takeoff_dof_pos_rewards_use_reference_stage_gates():
+def test_uika_takeoff_terminations_match_spring_jump():
+    source = _read("tasks/locomotion/robots/uika/takeoff_env_cfg.py")
+    term_source = source.split("class TerminationsCfg", 1)[1].split("class CurriculumCfg", 1)[0]
+
+    assert "time_out = DoneTerm(func=mdp.time_out, time_out=True)" in term_source
+    assert 'too_low = DoneTerm(func=mdp.is_too_low, params={"asset_cfg": SceneEntityCfg("robot"), "threshold": 0.15})' in term_source
+    assert '"threshold": 1.0' in term_source
+    assert 'body_names="base"' in term_source
+
+
+def test_uika_takeoff_push_matches_huangcang_and_is_disabled_in_play():
+    source = _read("tasks/locomotion/robots/uika/takeoff_env_cfg.py")
+    reward_source = _read("tasks/locomotion/mdp/spring_jump.py")
+    event_source = source.split("spring_jump_update = EventTerm(", 1)[1].split("class CommandsCfg", 1)[0]
+    play_source = source.split("class TakeoffPlayEnvCfg", 1)[1]
+
+    assert reward_source.count("push_vel_z_range: tuple[float, float] = (0.5, 1.2)") == 2
+    assert '"push_vel_z_range": (0.5, 1.2)' in event_source
+    assert '"push_initial_prob": 0.8' in event_source
+    assert '"push_decay_steps": 1200' in event_source
+    assert 'self.events.spring_jump_update.params["push_initial_prob"] = 0.0' in play_source
+
+
+def test_uika_takeoff_uses_same_delayed_motor_asset_as_velocity():
+    takeoff_source = _read("tasks/locomotion/robots/uika/takeoff_env_cfg.py")
+    velocity_source = _read("tasks/locomotion/robots/uika/velocity_env_cfg.py")
+    asset_source = _read("assets/uika.py")
+
+    assert "from himloco_lab.assets.uika import UIKA_CFG as ROBOT_CFG" in takeoff_source
+    assert "from himloco_lab.assets.uika import UIKA_CFG as ROBOT_CFG" in velocity_source
+    assert "TAKEOFF_ROBOT_CFG" not in takeoff_source
+    assert 'robot: ArticulationCfg = ROBOT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")' in takeoff_source
+    assert 'robot: ArticulationCfg = ROBOT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")' in velocity_source
+    assert "DelayedDCMotorCfg(" in asset_source
+    assert "min_delay=5" in asset_source
+    assert "max_delay=7" in asset_source
+
+
+def test_uika_takeoff_dof_pos_rewards_match_spring_jump_gates():
     env_source = _read("tasks/locomotion/robots/uika/takeoff_env_cfg.py")
     reward_source = _read("tasks/locomotion/mdp/spring_jump.py")
-    prepare_term_source = env_source.split("dof_pos_penalty_prepare_sj = RewTerm(", 1)[1].split(
-        "dof_pos_penalty_sj", 1
-    )[0]
     landing_term_source = env_source.split("dof_pos_penalty_sj = RewTerm(", 1)[1].split(
         "dof_hip_pos_penalty_sj", 1
-    )[0]
-    prepare_func_source = reward_source.split("def dof_pos_penalty_prepare_sj", 1)[1].split(
-        "def dof_pos_penalty_sj", 1
     )[0]
     landing_func_source = reward_source.split("def dof_pos_penalty_sj", 1)[1].split(
         "def dof_hip_pos_penalty_sj", 1
     )[0]
+    hip_term_source = env_source.split("dof_hip_pos_penalty_sj = RewTerm(", 1)[1].split("ang_vel_xy", 1)[0]
+    hip_func_source = reward_source.split("def dof_hip_pos_penalty_sj", 1)[1].split("def spring_jump_ang_vel_xy", 1)[0]
 
-    assert "weight=-3.0" in prepare_term_source
-    assert '"command_name": "base_velocity"' in prepare_term_source
-    assert '"target_joint_angles": TAKEOFF_CROUCH_JOINT_ANGLES' in prepare_term_source
-    assert "jump_flag = env.command_manager.get_command(command_name)[:, 2]" in prepare_func_source
-    assert "jump_flag == 0.0" in prepare_func_source
-    assert "env._sj_has_jumped.float()" in landing_func_source
-    assert '"command_name": "base_velocity"' in landing_term_source
+    assert "dof_pos_penalty_prepare_sj = RewTerm(" not in env_source
+    assert "weight=-0.1" in landing_term_source
+    assert '"command_name": "base_velocity"' not in landing_term_source
+    assert "env._sj_has_jumped.float()" not in landing_func_source
+    assert "return err" in landing_func_source
+    assert "weight=-1.0" in hip_term_source
+    assert '"command_name": "base_velocity"' not in hip_term_source
+    assert "jump_flag == 1.0" not in hip_func_source
 
 
-def test_takeoff_adaptation_runner_uses_mlp_adapt_model_not_himloco_network():
-    source = _read("tasks/locomotion/agents/rsl_rl_takeoff_adapt_cfg.py")
+def test_takeoff_runner_uses_plain_ppo_actor_critic_not_adaptation_network():
+    source = _read("tasks/locomotion/agents/rsl_rl_takeoff_cfg.py")
 
-    assert "RslRlMlpAdaptModelCfg" in source
-    assert "class UIKATakeoffPPOAdaptRunnerCfg" in source
+    assert not (SRC / "tasks/locomotion/agents/takeoff_adapt_model.py").exists()
+    assert not (SRC / "tasks/locomotion/agents/rsl_rl_takeoff_adapt_cfg.py").exists()
+    assert "RslRlMLPModelCfg" in source
+    assert "RslRlMlpAdaptModelCfg" not in source
+    assert "class UIKATakeoffPPORunnerCfg" in source
+    assert 'experiment_name = "uika_takeoff"' in source
     assert '"actor": ["actor_history"]' in source
     assert '"critic": ["critic"]' in source
-    assert "cmd_dim=3" in source
-    assert "max_length=10" in source
-    assert "privileged_target_key=\"privileged_target\"" in source
-    assert "privileged_target_dim=5" in source
+    assert "privileged_target" not in source
+    assert "adaptation_loss_coef" not in source
+    assert "takeoff_adapt_model" not in source
     assert "HIMActorCritic" not in source
     assert "HIMPPO" not in source
 

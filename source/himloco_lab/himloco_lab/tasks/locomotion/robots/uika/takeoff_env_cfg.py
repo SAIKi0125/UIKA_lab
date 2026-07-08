@@ -20,21 +20,6 @@ from himloco_lab.tasks.locomotion import mdp
 UIKA_JOINT_NAMES = list(ROBOT_CFG.joint_sdk_names)
 UIKA_HIP_JOINT_NAMES = [name for name in UIKA_JOINT_NAMES if "_hip_joint" in name]
 
-TAKEOFF_CROUCH_JOINT_ANGLES = {
-    "FL_hip_joint": -0.78,
-    "FL_thigh_joint": 0.40,
-    "FL_calf_joint": 0.20,
-    "FR_hip_joint": 0.78,
-    "FR_thigh_joint": 0.40,
-    "FR_calf_joint": 0.20,
-    "RL_hip_joint": -0.78,
-    "RL_thigh_joint": -0.05,
-    "RL_calf_joint": 0.20,
-    "RR_hip_joint": 0.78,
-    "RR_thigh_joint": -0.05,
-    "RR_calf_joint": 0.20,
-}
-
 
 @configclass
 class TakeoffSceneCfg(InteractiveSceneCfg):
@@ -114,15 +99,6 @@ class EventCfg:
         },
     )
 
-    reset_to_crouch_pose = EventTerm(
-        func=mdp.reset_to_joint_pose,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=UIKA_JOINT_NAMES, preserve_order=True),
-            "joint_angles": TAKEOFF_CROUCH_JOINT_ANGLES,
-        },
-    )
-
     reset_spring_jump_state = EventTerm(
         func=mdp.spring_jump_state_reset,
         mode="reset",
@@ -149,7 +125,7 @@ class EventCfg:
             "command_name": "base_velocity",
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "asset_cfg": SceneEntityCfg("robot"),
-            "push_vel_z_range": (1.5, 2.2),
+            "push_vel_z_range": (0.5, 1.2),
             "push_initial_prob": 0.8,
             "push_decay_steps": 1200,
         },
@@ -185,7 +161,7 @@ class ActionsCfg:
 
 @configclass
 class ObservationsCfg:
-    """Observation groups for adaptation-policy training."""
+    """Observation groups for fixed-point spring-jump training."""
 
     @configclass
     class PolicyCfg(ObsGroup):
@@ -245,8 +221,8 @@ class ObservationsCfg:
         velocity_commands = ObsTerm(
             func=mdp.generated_commands, clip=(-100, 100), params={"command_name": "base_velocity"}
         )
-        landing_xy_from_start = ObsTerm(
-            func=mdp.landing_xy_from_start,
+        landing_xy_from_takeoff = ObsTerm(
+            func=mdp.landing_xy_from_takeoff,
             params={"asset_cfg": SceneEntityCfg("robot")},
             clip=(-100, 100),
         )
@@ -267,21 +243,6 @@ class ObservationsCfg:
 
     critic: CriticCfg = CriticCfg()
 
-    @configclass
-    class PrivilegedTargetCfg(ObsGroup):
-        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, scale=2.0, clip=(-100, 100))
-        landing_xy_from_start = ObsTerm(
-            func=mdp.landing_xy_from_start,
-            params={"asset_cfg": SceneEntityCfg("robot")},
-            clip=(-100, 100),
-        )
-
-        def __post_init__(self):
-            self.enable_corruption = False
-            self.concatenate_terms = True
-
-    privileged_target: PrivilegedTargetCfg = PrivilegedTargetCfg()
-
 
 @configclass
 class RewardsCfg:
@@ -293,7 +254,6 @@ class RewardsCfg:
         params={
             "command_name": "base_velocity",
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "target_joint_angles": TAKEOFF_CROUCH_JOINT_ANGLES,
         },
     )
     line_z = RewTerm(
@@ -365,29 +325,15 @@ class RewardsCfg:
             "target_z_body": -0.20,
         },
     )
-    dof_pos_penalty_prepare_sj = RewTerm(
-        func=mdp.dof_pos_penalty_prepare_sj,
-        weight=-3.0,
-        params={
-            "command_name": "base_velocity",
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "asset_cfg": SceneEntityCfg("robot", joint_names=UIKA_JOINT_NAMES, preserve_order=True),
-            "target_joint_angles": TAKEOFF_CROUCH_JOINT_ANGLES,
-        },
-    )
     dof_pos_penalty_sj = RewTerm(
         func=mdp.dof_pos_penalty_sj,
         weight=-0.1,
-        params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=UIKA_JOINT_NAMES, preserve_order=True),
-            "command_name": "base_velocity",
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-        },
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=UIKA_JOINT_NAMES, preserve_order=True)},
     )
     dof_hip_pos_penalty_sj = RewTerm(
         func=mdp.dof_hip_pos_penalty_sj,
         weight=-1.0,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=UIKA_HIP_JOINT_NAMES), "command_name": "base_velocity"},
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=UIKA_HIP_JOINT_NAMES)},
     )
     ang_vel_xy = RewTerm(
         func=mdp.spring_jump_ang_vel_xy,
@@ -432,7 +378,7 @@ class TerminationsCfg:
     """Termination terms for the fixed-point jump."""
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    too_low = DoneTerm(func=mdp.is_too_low, params={"asset_cfg": SceneEntityCfg("robot"), "threshold": 0.12})
+    too_low = DoneTerm(func=mdp.is_too_low, params={"asset_cfg": SceneEntityCfg("robot"), "threshold": 0.15})
     base_contact = DoneTerm(
         func=mdp.illegal_contact,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 1.0},
@@ -488,3 +434,4 @@ class TakeoffPlayEnvCfg(TakeoffEnvCfg):
         self.events.randomize_rigid_body_mass_base = None
         self.events.randomize_com_positions = None
         self.events.randomize_actuator_gains = None
+        self.events.spring_jump_update.params["push_initial_prob"] = 0.0

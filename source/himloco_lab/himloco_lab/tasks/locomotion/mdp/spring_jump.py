@@ -21,6 +21,9 @@ def _init_sj_state(env: ManagerBasedRLEnv) -> None:
     env._sj_has_jumped = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
     env._sj_landing_xy = torch.zeros(env.num_envs, 2, dtype=torch.float, device=env.device)
     env._sj_init_xy = torch.zeros(env.num_envs, 2, dtype=torch.float, device=env.device)
+    env._sj_last_contact_xy = torch.zeros(env.num_envs, 2, dtype=torch.float, device=env.device)
+    env._sj_takeoff_xy = torch.zeros(env.num_envs, 2, dtype=torch.float, device=env.device)
+    env._sj_takeoff_xy_recorded = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
     env._sj_max_height = torch.zeros(env.num_envs, dtype=torch.float, device=env.device)
     env._sj_last_step_idx = torch.full((env.num_envs,), -1, dtype=torch.long, device=env.device)
     env._sj_push_applied = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
@@ -33,7 +36,7 @@ def spring_jump_update(
     sensor_cfg: SceneEntityCfg,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     contact_threshold: float = 1.0,
-    push_vel_z_range: tuple[float, float] = (1.5, 2.2),
+    push_vel_z_range: tuple[float, float] = (0.5, 1.2),
     push_initial_prob: float = 0.8,
     push_decay_steps: int = 1200,
 ) -> None:
@@ -70,6 +73,12 @@ def spring_jump_update(
                 asset.write_root_velocity_to_sim(root_vel, env_ids=push_ids)
         env._sj_push_applied[push_candidates] = True
 
+    contact_before_takeoff = any_contact & fresh & (~env._sj_takeoff_xy_recorded)
+    env._sj_last_contact_xy[contact_before_takeoff] = asset.data.root_pos_w[contact_before_takeoff, :2]
+
+    first_takeoff = all_air & fresh & jump_active & (~env._sj_takeoff_xy_recorded)
+    env._sj_takeoff_xy[first_takeoff] = env._sj_last_contact_xy[first_takeoff]
+    env._sj_takeoff_xy_recorded[first_takeoff] = True
     env._sj_was_in_flight = env._sj_was_in_flight | (all_air & fresh & jump_active)
 
     just_landed = env._sj_was_in_flight & any_contact & ~env._sj_has_jumped & fresh
@@ -88,7 +97,7 @@ def spring_jump_update_event(
     sensor_cfg: SceneEntityCfg,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     contact_threshold: float = 1.0,
-    push_vel_z_range: tuple[float, float] = (1.5, 2.2),
+    push_vel_z_range: tuple[float, float] = (0.5, 1.2),
     push_initial_prob: float = 0.8,
     push_decay_steps: int = 1200,
 ) -> None:
@@ -158,6 +167,9 @@ def spring_jump_state_reset(
     env._sj_has_jumped[env_ids] = False
     env._sj_landing_xy[env_ids] = asset.data.root_pos_w[env_ids, :2]
     env._sj_init_xy[env_ids] = asset.data.root_pos_w[env_ids, :2]
+    env._sj_last_contact_xy[env_ids] = asset.data.root_pos_w[env_ids, :2]
+    env._sj_takeoff_xy[env_ids] = asset.data.root_pos_w[env_ids, :2]
+    env._sj_takeoff_xy_recorded[env_ids] = False
     env._sj_max_height[env_ids] = asset.data.root_pos_w[env_ids, 2]
     env._sj_last_step_idx[env_ids] = -1
     env._sj_push_applied[env_ids] = False
@@ -183,6 +195,18 @@ def landing_xy_from_start(
     current_xy = asset.data.root_pos_w[:, :2]
     landing_xy = torch.where(env._sj_has_jumped.unsqueeze(1), env._sj_landing_xy, current_xy)
     return landing_xy - env._sj_init_xy
+
+
+def landing_xy_from_takeoff(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Return the landing/current xy offset from the actual takeoff position."""
+    _init_sj_state(env)
+    asset: RigidObject = env.scene[asset_cfg.name]
+    current_xy = asset.data.root_pos_w[:, :2]
+    landing_xy = torch.where(env._sj_has_jumped.unsqueeze(1), env._sj_landing_xy, current_xy)
+    return landing_xy - env._sj_takeoff_xy
 
 
 def has_jumped_obs(
@@ -338,6 +362,32 @@ def tracking_lin_vel_jump(
     return torch.exp(-err) * env._sj_was_in_flight.float() * (~env._sj_has_jumped).float() * 5.0
 
 
+def line_vel_x_setting(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    sensor_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    contact_threshold: float = 1.0,
+) -> torch.Tensor:
+    spring_jump_update(env, command_name, sensor_cfg, asset_cfg, contact_threshold)
+    asset: RigidObject = env.scene[asset_cfg.name]
+    jump_flag = env.command_manager.get_command(command_name)[:, 2]
+    return torch.square(asset.data.root_lin_vel_b[:, 0]) * (jump_flag == 0.0).float()
+
+
+def line_vel_y_setting(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    sensor_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    contact_threshold: float = 1.0,
+) -> torch.Tensor:
+    spring_jump_update(env, command_name, sensor_cfg, asset_cfg, contact_threshold)
+    asset: RigidObject = env.scene[asset_cfg.name]
+    jump_flag = env.command_manager.get_command(command_name)[:, 2]
+    return torch.square(asset.data.root_lin_vel_b[:, 1]) * (jump_flag == 0.0).float()
+
+
 def line_vel_stance(
     env: ManagerBasedRLEnv,
     command_name: str,
@@ -374,12 +424,12 @@ def dof_pos_penalty_prepare_sj(
     asset_cfg: SceneEntityCfg,
     command_name: str,
     sensor_cfg: SceneEntityCfg,
-    target_joint_angles: dict[str, float],
+    target_joint_angles: dict[str, float] | None = None,
     contact_threshold: float = 1.0,
 ) -> torch.Tensor:
     spring_jump_update(env, command_name, sensor_cfg, asset_cfg, contact_threshold)
     asset: Articulation = env.scene[asset_cfg.name]
-    if not hasattr(env, "_sj_dof_pos_prepare_target"):
+    if target_joint_angles is not None and not hasattr(env, "_sj_dof_pos_prepare_target"):
         target = asset.data.default_joint_pos[0].clone()
         name_to_idx = {name: idx for idx, name in enumerate(asset.joint_names)}
         for name, value in target_joint_angles.items():
@@ -387,7 +437,10 @@ def dof_pos_penalty_prepare_sj(
                 target[name_to_idx[name]] = float(value)
         env._sj_dof_pos_prepare_target = target
     jump_flag = env.command_manager.get_command(command_name)[:, 2]
-    target_pos = env._sj_dof_pos_prepare_target.unsqueeze(0)
+    if target_joint_angles is None:
+        target_pos = asset.data.default_joint_pos
+    else:
+        target_pos = env._sj_dof_pos_prepare_target.unsqueeze(0)
     err = torch.abs(asset.data.joint_pos[:, asset_cfg.joint_ids] - target_pos[:, asset_cfg.joint_ids]).sum(dim=1)
     return err * (jump_flag == 0.0).float()
 
@@ -406,22 +459,18 @@ def dof_pos_penalty_sj(
     err = torch.abs(
         asset.data.joint_pos[:, asset_cfg.joint_ids] - asset.data.default_joint_pos[:, asset_cfg.joint_ids]
     ).sum(dim=1)
-    return err * env._sj_has_jumped.float()
+    return err
 
 
 def dof_hip_pos_penalty_sj(
     env: ManagerBasedRLEnv,
     asset_cfg: SceneEntityCfg,
-    command_name: str | None = None,
 ) -> torch.Tensor:
     asset: Articulation = env.scene[asset_cfg.name]
     err = torch.abs(
         asset.data.joint_pos[:, asset_cfg.joint_ids] - asset.data.default_joint_pos[:, asset_cfg.joint_ids]
     ).sum(dim=1)
-    if command_name is None:
-        return err
-    jump_flag = env.command_manager.get_command(command_name)[:, 2]
-    return err * (jump_flag == 1.0).float()
+    return err
 
 
 def spring_jump_ang_vel_xy(
