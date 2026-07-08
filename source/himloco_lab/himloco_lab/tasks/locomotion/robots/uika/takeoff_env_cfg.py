@@ -140,7 +140,6 @@ class CommandsCfg:
         asset_name="robot",
         resampling_time_range=(1.0e9, 1.0e9),
         debug_vis=False,
-        ranges=mdp.SpringJumpCommandCfg.Ranges(target_x=(0.8, 1.2), target_y=(0.0, 0.0)),
         setting_frame_range=(50, 60),
     )
 
@@ -221,11 +220,6 @@ class ObservationsCfg:
         velocity_commands = ObsTerm(
             func=mdp.generated_commands, clip=(-100, 100), params={"command_name": "base_velocity"}
         )
-        landing_xy_from_takeoff = ObsTerm(
-            func=mdp.landing_xy_from_takeoff,
-            params={"asset_cfg": SceneEntityCfg("robot")},
-            clip=(-100, 100),
-        )
         has_jumped = ObsTerm(
             func=mdp.has_jumped_obs,
             params={
@@ -295,6 +289,7 @@ class RewardsCfg:
             "command_name": "base_velocity",
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "asset_cfg": SceneEntityCfg("robot"),
+            "target_xy": (1.0, 0.0),
         },
     )
     tracking_lin_vel_jump = RewTerm(
@@ -304,6 +299,7 @@ class RewardsCfg:
             "command_name": "base_velocity",
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "asset_cfg": SceneEntityCfg("robot"),
+            "target_forward_velocity": 1.6,
         },
     )
     line_vel_stance = RewTerm(
@@ -428,7 +424,6 @@ class TakeoffPlayEnvCfg(TakeoffEnvCfg):
     def __post_init__(self):
         super().__post_init__()
         self.scene.num_envs = 64
-        self.commands.base_velocity.ranges = mdp.SpringJumpCommandCfg.Ranges(target_x=(1.0, 1.0), target_y=(0.0, 0.0))
         self.commands.base_velocity.setting_frame_range = (50, 50)
         self.events.randomize_rigid_body_material = None
         self.events.randomize_rigid_body_mass_base = None

@@ -55,11 +55,15 @@ def export_deploy_cfg(env: ManagerBasedRLEnv, log_dir, history_length: int = 0, 
         cfg["commands"]["base_velocity"] = {}
         if hasattr(env.cfg.commands.base_velocity, "limit_ranges"):
             ranges = env.cfg.commands.base_velocity.limit_ranges.to_dict()
-        else:
+        elif hasattr(env.cfg.commands.base_velocity, "ranges"):
             ranges = env.cfg.commands.base_velocity.ranges.to_dict()
+        else:
+            ranges = {}
         for item_name in ["lin_vel_x", "lin_vel_y", "ang_vel_z"]:
-            ranges[item_name] = list(ranges[item_name])
-        cfg["commands"]["base_velocity"]["ranges"] = ranges
+            if item_name in ranges:
+                ranges[item_name] = list(ranges[item_name])
+        if ranges:
+            cfg["commands"]["base_velocity"]["ranges"] = ranges
 
     # --- actions ---
     action_names = env.action_manager.active_terms

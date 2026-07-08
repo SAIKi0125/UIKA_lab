@@ -30,15 +30,9 @@ class UniformLevelVelocityCommandCfg(UniformVelocityCommandCfg):
 
 @configclass
 class SpringJumpCommandCfg(CommandTermCfg):
-    """Configuration for the three-channel spring-jump command."""
+    """Configuration for the one-channel spring-jump trigger command."""
 
     class_type: type = SpringJumpCommand
 
-    @configclass
-    class Ranges:
-        target_x: tuple[float, float] = (0.8, 1.2)
-        target_y: tuple[float, float] = (0.0, 0.0)
-
     asset_name: str = "robot"
-    ranges: Ranges = Ranges()
     setting_frame_range: tuple[int, int] = (50, 60)

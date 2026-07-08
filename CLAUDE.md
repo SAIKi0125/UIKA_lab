@@ -38,11 +38,11 @@
 - takeoff 分支以 SpringJump 定点跳为基准；HuangCang takeoff 只作参考，不作为最终 reward 权重标准。
 - takeoff 不修改 robot default joint pose；`robot = ROBOT_CFG.replace(...)`，action=0、reset dof、`before_setting`、`dof_pos`、`dof_hip_pos` 都以 UIKA 资产默认站姿为基准，和 SpringJump 使用 `default_joint_angles` 的结构一致。
 - takeoff 不使用 adaptation 网络；当前 runner 是 `rsl_rl_takeoff_cfg:UIKATakeoffPPORunnerCfg`，普通 RSL-RL MLP actor-critic，actor 输入 `actor_history` 10 帧历史，critic 输入 `critic` 3 帧历史；仓库中不应再引用 `rsl_rl_takeoff_adapt_cfg`、`takeoff_adapt_model`、`privileged_target` 或 `adaptation_loss_coef`。
-- 命令 `base_velocity` 是 3 维: `[target_x, target_y, jump_flag]`。前两维是落点目标，不是连续前进速度命令。
+- 命令 `base_velocity` 是 1 维: `[jump_flag]`。不要再把目标落点作为 command 或 obs 传给 actor/critic。
 - `jump_flag == 0.0`: 起跳前准备/下蹲阶段。
 - `jump_flag == 1.0`: 起跳触发后阶段。
 - `_sj_was_in_flight`: 曾经四足离地，条件是 `all_air & fresh & (jump_flag == 1.0)` 后保持为 True。
-- `_sj_last_contact_xy` / `_sj_takeoff_xy`: 保留给 critic 的 `landing_xy_from_takeoff` 观测使用；当前 active `land_pos` reward 已按原生 SpringJump 使用 `_sj_init_xy + command_xy`，不是 takeoff xy。
+- `_sj_last_contact_xy` / `_sj_takeoff_xy`: 仅保留为内部状态或调试辅助；当前 critic 不接收 `landing_xy_from_start` 或 `landing_xy_from_takeoff`。
 - `_sj_has_jumped`: 已经飞行后再次接触地面，条件是 `_sj_was_in_flight & any_contact & ~_sj_has_jumped & fresh`。
 - `_sj_landing_xy`: 只在 `just_landed` 时记录当前 root xy。
 - 随机向上辅助冲量只在 `jump_flag == 1.0 & ~_sj_push_applied & ~_sj_has_jumped & fresh` 候选时触发；训练范围 `(0.5, 1.2)`、初始概率 `0.8`、`1200` step 线性衰减；Play 中 `push_initial_prob=0.0` 禁用推动。
@@ -51,9 +51,9 @@
 - `flight`: `_sj_was_in_flight`，曾离地后生效。
 - `base_height_flight`: `_sj_was_in_flight & ~_sj_has_jumped`，飞行中高度奖励。
 - `base_height_flight` / `base_height_stance_sj` 的 active reward 结构按 SpringJump，但高度数值保留 UIKA 物理尺寸：`target_height=0.50`、`stance_target=0.3357`、`setting_target=0.24`；不要为了逐字对齐 GO2 改成 GO2 高度。
-- `land_pos`: `_sj_has_jumped & upright & (max_height > min_height)`；目标落点按原生 SpringJump 使用 `_sj_init_xy + command_xy`。`upright` 在 Isaac Lab 中用 `sum(abs(projected_gravity_b[:2])) < 0.6` 表达，这是环境表示差异，不再为了逐字一致改成 Euler。
-- critic 使用 `landing_xy_from_takeoff`，返回 `landing_or_current_xy - _sj_takeoff_xy`；不要再用 reset 初始位置作为落点基准。
-- `tracking_lin_vel_jump`: `_sj_was_in_flight & ~_sj_has_jumped`，只在飞行未落地阶段按目标 x 速度奖励。
+- `land_pos`: `_sj_has_jumped & upright & (max_height > min_height)`；目标落点使用固定 reward 参数 `target_xy=(1.0, 0.0)`，计算为 `_sj_init_xy + target_xy`，不要从 command 读取 xy。
+- critic 不传 landing position；critic active obs 只包含 base/joint/action、1 维 jumpflag command、has_jumped 等状态。
+- `tracking_lin_vel_jump`: `_sj_was_in_flight & ~_sj_has_jumped`，只在飞行未落地阶段按固定 `target_forward_velocity=1.6` 奖励，不再从 command x 读取目标速度。
 - `line_vel_stance`: `_sj_has_jumped`，落地后惩罚水平速度用于站稳。
 - `foot_clearance_jump`: `_sj_was_in_flight & ~_sj_has_jumped`，飞行未落地阶段惩罚脚部高度偏差。
 - 当前 active reward 不启用 `line_vel_x_setting`、`line_vel_y_setting`、`dof_pos_penalty_prepare_sj`，因为它们不是原生 SpringJump reward 表。

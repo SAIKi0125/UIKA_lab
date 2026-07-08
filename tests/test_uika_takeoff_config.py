@@ -23,21 +23,24 @@ def test_uika_takeoff_tasks_are_registered_with_standard_rsl_rl_runner():
     ) in source
 
 
-def test_spring_jump_command_uses_my_unitree_three_channel_target_jump_flag_semantics():
+def test_spring_jump_command_uses_single_jump_flag_semantics():
     source = _read("tasks/locomotion/mdp/commands/commands.py")
     cfg_source = _read("tasks/locomotion/mdp/commands/commands_cfg.py")
 
     assert "class SpringJumpCommand(" in source
-    assert "self._command = torch.zeros(self.num_envs, 3" in source
-    assert "target_x" in source
-    assert "target_y" in source
+    assert "self._command = torch.zeros(self.num_envs, 1" in source
     assert "jump_flag" in source
-    assert "self._command[env_ids, 2] = 0.0" in source
-    assert "self._command[active, 2] = 1.0" in source
+    assert "target_x" not in source.split("class SpringJumpCommand", 1)[1]
+    assert "target_y" not in source.split("class SpringJumpCommand", 1)[1]
+    assert "self._command[env_ids, 0] = 0.0" in source
+    assert "self._command[active, 0] = 1.0" in source
+    assert "self._command[env_ids, 1]" not in source
+    assert "self._command[env_ids, 2]" not in source
     assert "ang_vel_z" not in source.split("class SpringJumpCommand", 1)[1]
     assert "class SpringJumpCommandCfg" in cfg_source
-    assert "target_x: tuple[float, float] = (0.8, 1.2)" in cfg_source
-    assert "target_y: tuple[float, float] = (0.0, 0.0)" in cfg_source
+    assert "class Ranges" not in cfg_source
+    assert "target_x: tuple[float, float]" not in cfg_source
+    assert "target_y: tuple[float, float]" not in cfg_source
     assert "setting_frame_range: tuple[int, int] = (50, 60)" in cfg_source
 
 
@@ -56,8 +59,8 @@ def test_uika_takeoff_env_has_actor_history_critic_obs_and_spring_jump_rewards()
     critic_source = source.split("class CriticCfg", 1)[1].split("critic:", 1)[0]
     assert "velocity_commands = ObsTerm(" in critic_source
     assert "func=mdp.generated_commands" in critic_source
-    assert "func=mdp.landing_xy_from_takeoff" in critic_source
-    assert "func=mdp.landing_xy_from_start" not in critic_source
+    assert "landing_xy_from_takeoff" not in critic_source
+    assert "landing_xy_from_start" not in critic_source
 
     for reward_name in [
         "before_setting",
@@ -76,14 +79,20 @@ def test_uika_takeoff_env_has_actor_history_critic_obs_and_spring_jump_rewards()
     assert "dof_pos_penalty_prepare_sj = RewTerm(" not in source
 
 
-def test_uika_takeoff_land_pos_uses_spring_jump_reset_xy_reward_logic():
+def test_uika_takeoff_land_pos_uses_fixed_target_without_command_xy_or_obs():
     reward_source = _read("tasks/locomotion/mdp/spring_jump.py")
     reset_source = reward_source.split("def spring_jump_state_reset", 1)[1].split("def is_too_low", 1)[0]
     land_pos_source = reward_source.split("def land_pos", 1)[1].split("def successful_jump_sj", 1)[0]
+    env_source = _read("tasks/locomotion/robots/uika/takeoff_env_cfg.py")
+    land_pos_term_source = env_source.split("land_pos = RewTerm(", 1)[1].split("tracking_lin_vel_jump", 1)[0]
 
     assert "env._sj_init_xy[env_ids] = asset.data.root_pos_w[env_ids, :2]" in reset_source
-    assert "target_xy = env._sj_init_xy + cmd[:, :2]" in land_pos_source
+    assert "target_xy = env._sj_init_xy + target_offset" in land_pos_source
+    assert "cmd[:, :2]" not in land_pos_source
     assert "target_xy = env._sj_takeoff_xy + cmd[:, :2]" not in land_pos_source
+    assert '"target_xy": (1.0, 0.0)' in land_pos_term_source
+    assert "landing_xy_from_takeoff = ObsTerm(" not in env_source
+    assert "landing_xy_from_start = ObsTerm(" not in env_source
 
 
 def test_uika_takeoff_uses_original_spring_jump_generic_penalties():

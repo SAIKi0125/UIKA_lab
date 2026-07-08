@@ -161,10 +161,9 @@ class UniformLevelVelocityCommand(UniformVelocityCommand):
 
 
 class SpringJumpCommand(CommandTerm):
-    """Three-channel spring-jump command: [target_x, target_y, jump_flag].
+    """One-channel spring-jump command: [jump_flag].
 
     This mirrors My_unitree_go2_gym GO2_Spring_Jump:
-    - target_x/target_y are desired landing offsets relative to the reset pose.
     - jump_flag starts at 0 and flips to 1 at a sampled setting frame.
     - the flag stays high until the next reset.
     """
@@ -173,15 +172,13 @@ class SpringJumpCommand(CommandTerm):
 
     def __init__(self, cfg: SpringJumpCommandCfg, env: ManagerBasedEnv):
         super().__init__(cfg, env)
-        self._command = torch.zeros(self.num_envs, 3, device=self.device)
+        self._command = torch.zeros(self.num_envs, 1, device=self.device)
         self._command_frame = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
 
     def __str__(self) -> str:
         return (
             "SpringJumpCommand:\n"
             f"\tCommand dimension: {tuple(self.command.shape[1:])}\n"
-            f"\ttarget_x: {self.cfg.ranges.target_x}\n"
-            f"\ttarget_y: {self.cfg.ranges.target_y}\n"
             f"\tsetting_frame_range: {self.cfg.setting_frame_range}\n"
         )
 
@@ -196,14 +193,10 @@ class SpringJumpCommand(CommandTerm):
         n = len(env_ids)
         if n == 0:
             return
-        x_lo, x_hi = self.cfg.ranges.target_x
-        y_lo, y_hi = self.cfg.ranges.target_y
         f_lo, f_hi = self.cfg.setting_frame_range
-        self._command[env_ids, 0] = torch.empty(n, device=self.device).uniform_(x_lo, x_hi)
-        self._command[env_ids, 1] = torch.empty(n, device=self.device).uniform_(y_lo, y_hi)
-        self._command[env_ids, 2] = 0.0
+        self._command[env_ids, 0] = 0.0
         self._command_frame[env_ids] = torch.randint(int(f_lo), int(f_hi) + 1, (n,), device=self.device)
 
     def _update_command(self):
         active = self._env.episode_length_buf >= self._command_frame
-        self._command[active, 2] = 1.0
+        self._command[active, 0] = 1.0
