@@ -22,16 +22,16 @@ from himloco_lab.tasks.locomotion import mdp
 
 UIKA_JOINT_NAMES = list(ROBOT_CFG.joint_sdk_names)
 UIKA_LOWER_JOINT_POS_TARGET = {
-    "FL_hip_joint": -0.50,
+    "FL_hip_joint": -0.7,
     "FL_thigh_joint": 0.30,
     "FL_calf_joint": 0.20,
-    "FR_hip_joint": 0.50,
+    "FR_hip_joint": 0.7,
     "FR_thigh_joint": 0.30,
     "FR_calf_joint": 0.20,
-    "RL_hip_joint": -0.50,
+    "RL_hip_joint": -0.7,
     "RL_thigh_joint": 0.30,
     "RL_calf_joint": 0.20,
-    "RR_hip_joint": 0.50,
+    "RR_hip_joint": 0.7,
     "RR_thigh_joint": 0.30,
     "RR_calf_joint": 0.20,
 }
@@ -214,7 +214,7 @@ class CommandsCfg:
         heading_control_stiffness=0.5,
         debug_vis=True,
         ranges=mdp.UniformThresholdVelocityCommandCfg.Ranges(
-            lin_vel_x=(-1.0, 1.0), lin_vel_y=(-0.0, 0.0), ang_vel_z=(-1.0, 1.0)
+            lin_vel_x=(-1.0, 1.0), lin_vel_y=(-0.0, 0.0), ang_vel_z=(-0.5, 0.5)
         ),
     )
 
@@ -246,8 +246,11 @@ class ObservationsCfg:
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.25, clip=(-100, 100), noise=Unoise(n_min=-0.2, n_max=0.2))
         projected_gravity = ObsTerm(func=mdp.projected_gravity, clip=(-100, 100), noise=Unoise(n_min=-0.05, n_max=0.05))
         joint_pos_rel = ObsTerm(
-            func=mdp.joint_pos_rel,
-            params={"asset_cfg": SceneEntityCfg("robot", joint_names=UIKA_JOINT_NAMES, preserve_order=True)},
+            func=mdp.joint_pos_rel_to_target,
+            params={
+                "asset_cfg": SceneEntityCfg("robot", joint_names=UIKA_JOINT_NAMES, preserve_order=True),
+                "target_joint_pos": UIKA_LOWER_JOINT_POS_TARGET,
+            },
             clip=(-100, 100),
             noise=Unoise(n_min=-0.01, n_max=0.01),
         )
@@ -304,20 +307,24 @@ class RewardsCfg:
     # Shape body motion and posture while leaving planar/yaw tracking to command rewards.
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
-    flat_orientation_l2 = None
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-0.2)
     base_height_l2 = RewTerm(
         func=mdp.base_height_l2,
-        weight=-5.0,
+        weight=-1.0,
         params={
             # "target_height": 0.3357,
-            "target_height": 0.22,
+            "target_height": 0.25,
             "asset_cfg": SceneEntityCfg("robot", body_names="base"),
             "sensor_cfg": SceneEntityCfg("base_height_scanner"),
         },
     )
 
-    body_lin_acc_l2 = None
-    upward = RewTerm(func=mdp.upward, weight=0.25)
+    body_lin_acc_l2 = RewTerm(
+        func=mdp.body_lin_acc_l2,
+        weight=-1e-4,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="base")},
+    )
+    upward = RewTerm(func=mdp.upward, weight=0.0)
 
     # ---------------------------------------------------------------------
     # Joint regularization
@@ -328,9 +335,18 @@ class RewardsCfg:
     joint_power = RewTerm(func=mdp.joint_power, weight=-2e-5)
     joint_vel_l2 = None
     joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
-    joint_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
+    joint_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-1.0)
     joint_vel_limits = None
-    stand_still = None
+    stand_still = RewTerm(
+        func=mdp.stand_still,
+        weight=-2.0,
+        params={
+            "command_name": "base_velocity",
+            "command_threshold": 0.1,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+            "target_joint_pos": UIKA_LOWER_JOINT_POS_TARGET,
+        },
+    )
 
     joint_pos_penalty = RewTerm(
         func=mdp.joint_pos_penalty,
@@ -345,18 +361,7 @@ class RewardsCfg:
         },
     )
 
-    joint_mirror = RewTerm(
-        func=mdp.joint_mirror,
-        weight=-0.1,
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "mirror_joints": [
-                ["FR_(thigh|calf).*", "RL_(thigh|calf).*"],
-                ["FL_(thigh|calf).*", "RR_(thigh|calf).*"],
-            ],
-            "target_joint_pos": UIKA_LOWER_JOINT_POS_TARGET,
-        },
-    )
+    joint_mirror = None
 
     # ---------------------------------------------------------------------
     # Action smoothness
@@ -370,7 +375,7 @@ class RewardsCfg:
     # Penalize non-foot contacts and excessive foot impact forces.
     undesired_contacts = RewTerm(
         func=mdp.undesired_contacts,
-        weight=-1.0,
+        weight=-0.0,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names="^(?!.*_foot).*"),
             "threshold": 1.0,
@@ -384,12 +389,12 @@ class RewardsCfg:
     # Main task rewards: track commanded planar velocity and yaw rate.
     track_lin_vel_xy = RewTerm(
         func=mdp.track_lin_vel_xy_exp,
-        weight=3.0,
+        weight=1.0,
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
     track_ang_vel_z = RewTerm(
         func=mdp.track_ang_vel_z_exp,
-        weight=1.5,
+        weight=0.5,
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
     not_moving_when_commanded = None
@@ -406,10 +411,28 @@ class RewardsCfg:
 
     feet_contact_without_cmd = RewTerm(
         func=mdp.feet_contact_without_cmd,
-        weight=0.1,
+        weight=0.0,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "command_name": "base_velocity",
+        },
+    )
+
+    feet_air_without_cmd = RewTerm(
+        func=mdp.feet_air_without_cmd,
+        weight=-2.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "command_name": "base_velocity",
+        },
+    )
+
+    single_foot_air_time = RewTerm(
+        func=mdp.single_foot_air_time,
+        weight=-2.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "threshold": 0.25,
         },
     )
 
@@ -417,7 +440,7 @@ class RewardsCfg:
 
     feet_slide = RewTerm(
         func=mdp.feet_slide,
-        weight=-0.1,
+        weight=-0.0,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),

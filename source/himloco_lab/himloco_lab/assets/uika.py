@@ -47,7 +47,7 @@ UIKA_CFG = UIKAArticulationCfg(
         asset_path=f"{UIKA_ASSETS_DIR}/urdf/uika.urdf",
     ),
     init_state=ArticulationCfg.InitialStateCfg(
-        pos=(0.0, 0.0, 0.3357),
+        pos=(0.0, 0.0, 0.23),
         joint_pos={
             "FL_hip_joint": -0.78,
             "FL_thigh_joint": 0.05,

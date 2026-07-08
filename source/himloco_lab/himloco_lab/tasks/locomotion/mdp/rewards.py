@@ -342,6 +342,35 @@ def feet_contact_without_cmd(
     return reward
 
 
+def feet_air_without_cmd(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    sensor_cfg: SceneEntityCfg,
+    command_threshold: float = 0.1,
+    contact_threshold: float = 1.0,
+) -> torch.Tensor:
+    """Penalize airborne feet when the velocity command is near zero."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    contact = (
+        contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0]
+        > contact_threshold
+    )
+    no_contact = ~contact
+    reward = torch.sum(no_contact, dim=-1).float()
+    reward *= torch.linalg.norm(env.command_manager.get_command(command_name), dim=1) < command_threshold
+    reward *= _upright_gate(env)
+    return reward
+
+
+def single_foot_air_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, threshold: float = 0.25) -> torch.Tensor:
+    """Penalize each foot's continuous air time above a short swing allowance."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    air_time = contact_sensor.data.current_air_time[:, sensor_cfg.body_ids]
+    reward = torch.sum(torch.clamp(air_time - threshold, min=0.0), dim=1)
+    reward *= _upright_gate(env)
+    return reward
+
+
 def feet_contact(
     env: ManagerBasedRLEnv, command_name: str, expect_contact_num: int, sensor_cfg: SceneEntityCfg
 ) -> torch.Tensor:

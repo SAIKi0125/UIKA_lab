@@ -170,7 +170,7 @@ def test_uika_rough_rewards_are_configured_in_rough_cfg():
     ).read_text()
 
     assert "flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=0)" in velocity_source
-    assert "upward = RewTerm(func=mdp.upward, weight=0.25)" in velocity_source
+    assert "upward = RewTerm(func=mdp.upward, weight=0.0)" in velocity_source
     assert "self.rewards.flat_orientation_l2.weight = -0.2" in rough_source
     assert "self.rewards.base_height_l2.weight = -1.0" in rough_source
     assert 'self.rewards.base_height_l2.params["target_height"] = 0.3357' in rough_source
@@ -288,16 +288,16 @@ def test_uika_velocity_default_pose_rewards_target_lower_pose():
     ).read_text()
 
     expected_targets = {
-        "FL_hip_joint": -0.50,
+        "FL_hip_joint": -0.70,
         "FL_thigh_joint": 0.30,
         "FL_calf_joint": 0.20,
-        "FR_hip_joint": 0.50,
+        "FR_hip_joint": 0.70,
         "FR_thigh_joint": 0.30,
         "FR_calf_joint": 0.20,
-        "RL_hip_joint": -0.50,
+        "RL_hip_joint": -0.70,
         "RL_thigh_joint": 0.30,
         "RL_calf_joint": 0.20,
-        "RR_hip_joint": 0.50,
+        "RR_hip_joint": 0.70,
         "RR_thigh_joint": 0.30,
         "RR_calf_joint": 0.20,
     }
@@ -312,7 +312,7 @@ def test_uika_velocity_default_pose_rewards_target_lower_pose():
     assert "reward = mdp.joint_deviation_l1(env, asset_cfg)" not in rewards_source
 
 
-def test_uika_velocity_base_height_target_is_twenty_two_cm():
+def test_uika_velocity_base_height_target_is_twenty_five_cm():
     source = (
         Path(__file__).resolve().parents[1]
         / "source"
@@ -326,7 +326,7 @@ def test_uika_velocity_base_height_target_is_twenty_two_cm():
     ).read_text()
     base_height_source = source.split("base_height_l2 = RewTerm(", 1)[1].split("body_lin_acc_l2", 1)[0]
 
-    assert '"target_height": 0.22' in base_height_source
+    assert '"target_height": 0.25' in base_height_source
 
 
 def test_uika_velocity_disabled_rewards_are_none_to_avoid_registered_zero_terms():
@@ -344,11 +344,8 @@ def test_uika_velocity_disabled_rewards_are_none_to_avoid_registered_zero_terms(
 
     disabled_reward_names = [
         "is_terminated",
-        "flat_orientation_l2",
-        "body_lin_acc_l2",
         "joint_vel_l2",
         "joint_vel_limits",
-        "stand_still",
         "contact_forces",
         "not_moving_when_commanded",
         "feet_air_time",
@@ -362,6 +359,98 @@ def test_uika_velocity_disabled_rewards_are_none_to_avoid_registered_zero_terms(
 
     for reward_name in disabled_reward_names:
         assert f"{reward_name} = None" in source
+
+
+def test_uika_velocity_flat_orientation_penalty_is_enabled():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "tasks"
+        / "locomotion"
+        / "robots"
+        / "uika"
+        / "velocity_env_cfg.py"
+    ).read_text()
+
+    assert "flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-0.2)" in source
+
+
+def test_uika_velocity_body_linear_acceleration_penalty_is_enabled_lightly():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "tasks"
+        / "locomotion"
+        / "robots"
+        / "uika"
+        / "velocity_env_cfg.py"
+    ).read_text()
+    body_lin_acc_source = source.split("body_lin_acc_l2 = RewTerm(", 1)[1].split("upward", 1)[0]
+
+    assert "func=mdp.body_lin_acc_l2" in body_lin_acc_source
+    assert "weight=-1e-4" in body_lin_acc_source
+    assert 'params={"asset_cfg": SceneEntityCfg("robot", body_names="base")}' in body_lin_acc_source
+
+
+def test_uika_velocity_penalizes_airborne_feet_without_command():
+    velocity_source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "tasks"
+        / "locomotion"
+        / "robots"
+        / "uika"
+        / "velocity_env_cfg.py"
+    ).read_text()
+    rewards_source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "tasks"
+        / "locomotion"
+        / "mdp"
+        / "rewards.py"
+    ).read_text()
+    reward_source = rewards_source.split("def feet_air_without_cmd(", 1)[1].split("def feet_contact(", 1)[0]
+    config_source = velocity_source.split("feet_air_without_cmd = RewTerm(", 1)[1].split("feet_stumble = None", 1)[0]
+
+    assert "contact_threshold: float = 1.0" in reward_source
+    assert "command_threshold: float = 0.1" in reward_source
+    assert "no_contact = ~contact" in reward_source
+    assert "torch.sum(no_contact, dim=-1).float()" in reward_source
+    assert "torch.linalg.norm(env.command_manager.get_command(command_name), dim=1) < command_threshold" in reward_source
+    assert "func=mdp.feet_air_without_cmd" in config_source
+    assert "weight=-2.0" in config_source
+    assert '"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")' in config_source
+    assert '"command_name": "base_velocity"' in config_source
+
+
+def test_uika_velocity_stand_still_targets_lower_pose():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "source"
+        / "himloco_lab"
+        / "himloco_lab"
+        / "tasks"
+        / "locomotion"
+        / "robots"
+        / "uika"
+        / "velocity_env_cfg.py"
+    ).read_text()
+    stand_still_source = source.split("stand_still = RewTerm(", 1)[1].split("joint_pos_penalty", 1)[0]
+
+    assert "func=mdp.stand_still" in stand_still_source
+    assert '"command_name": "base_velocity"' in stand_still_source
+    assert '"command_threshold": 0.1' in stand_still_source
+    assert '"asset_cfg": SceneEntityCfg("robot", joint_names=".*")' in stand_still_source
+    assert '"target_joint_pos": UIKA_LOWER_JOINT_POS_TARGET' in stand_still_source
 
 
 def test_uika_velocity_action_offset_uses_lower_pose():
@@ -381,6 +470,17 @@ def test_uika_velocity_action_offset_uses_lower_pose():
     assert "offset=UIKA_LOWER_JOINT_POS_TARGET" in action_source
     assert "use_default_offset=False" in action_source
     assert "use_default_offset=True" not in action_source
+
+
+def test_show_uika_crouch_pose_script_uses_fixed_base_and_current_lower_pose():
+    source = (Path(__file__).resolve().parents[1] / "scripts" / "show_uika_crouch_pose.py").read_text()
+
+    assert "UIKA_LOWER_JOINT_POS_TARGET" in source
+    assert "ROBOT_CFG.spawn.replace(fix_base=True)" in source
+    assert "joint_pos=UIKA_LOWER_JOINT_POS_TARGET" in source
+    assert "parser.add_argument(\"--base_height\"" in source
+    assert "robot.write_joint_state_to_sim(joint_pos, joint_vel)" in source
+    assert "robot.set_joint_position_target(joint_pos)" in source
 
 
 def test_uika_velocity_too_low_termination_matches_takeoff():
