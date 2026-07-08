@@ -125,7 +125,7 @@ class EventCfg:
             "command_name": "base_velocity",
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "asset_cfg": SceneEntityCfg("robot"),
-            "push_vel_z_range": (0.5, 1.2),
+            "push_vel_z_range": (1.5, 2.2),
             "push_initial_prob": 0.8,
             "push_decay_steps": 1200,
         },

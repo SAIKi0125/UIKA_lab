@@ -45,7 +45,7 @@
 - `_sj_last_contact_xy` / `_sj_takeoff_xy`: 仅保留为内部状态或调试辅助；当前 critic 不接收 `landing_xy_from_start` 或 `landing_xy_from_takeoff`。
 - `_sj_has_jumped`: 已经飞行后再次接触地面，条件是 `_sj_was_in_flight & any_contact & ~_sj_has_jumped & fresh`。
 - `_sj_landing_xy`: 只在 `just_landed` 时记录当前 root xy。
-- 随机向上辅助冲量只在 `jump_flag == 1.0 & ~_sj_push_applied & ~_sj_has_jumped & fresh` 候选时触发；训练范围 `(0.5, 1.2)`、初始概率 `0.8`、`1200` step 线性衰减；Play 中 `push_initial_prob=0.0` 禁用推动。
+- 随机向上辅助冲量只在 `jump_flag == 1.0 & ~_sj_push_applied & ~_sj_has_jumped & fresh` 候选时触发；训练按原生 SpringJump：范围 `(1.5, 2.2)`，概率 `max(8 - int(common_step_counter / 1200), 0) / 10`，并由 `push_initial_prob=0.8` 上限控制；Play 中 `push_initial_prob=0.0` 禁用推动。
 - `before_setting`: `jump_flag == 0.0`，奖励接近 robot default joint pose，不单独传下蹲 target。
 - `line_z`: `~_sj_has_jumped & jump_flag == 1.0`，奖励向上速度。
 - `flight`: `_sj_was_in_flight`，曾离地后生效。

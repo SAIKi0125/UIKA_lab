@@ -40,7 +40,7 @@ def spring_jump_update(
     sensor_cfg: SceneEntityCfg,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     contact_threshold: float = 1.0,
-    push_vel_z_range: tuple[float, float] = (0.5, 1.2),
+    push_vel_z_range: tuple[float, float] = (1.5, 2.2),
     push_initial_prob: float = 0.8,
     push_decay_steps: int = 1200,
 ) -> None:
@@ -63,8 +63,9 @@ def spring_jump_update(
 
     push_candidates = jump_active & (~env._sj_push_applied) & (~env._sj_has_jumped) & fresh
     if push_candidates.any() and push_initial_prob > 0.0:
-        step_count = float(getattr(env, "common_step_counter", 0))
-        current_prob = max(float(push_initial_prob) - step_count / float(push_decay_steps) * float(push_initial_prob), 0.0)
+        step_count = int(getattr(env, "common_step_counter", 0))
+        current_prob = max(8 - int(step_count / float(push_decay_steps)), 0) / 10.0
+        current_prob = min(current_prob, float(push_initial_prob))
         if current_prob > 0.0:
             rand_mask = torch.rand(env.num_envs, device=env.device) < current_prob
             push_ids = torch.where(push_candidates & rand_mask)[0]
@@ -101,7 +102,7 @@ def spring_jump_update_event(
     sensor_cfg: SceneEntityCfg,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     contact_threshold: float = 1.0,
-    push_vel_z_range: tuple[float, float] = (0.5, 1.2),
+    push_vel_z_range: tuple[float, float] = (1.5, 2.2),
     push_initial_prob: float = 0.8,
     push_decay_steps: int = 1200,
 ) -> None:

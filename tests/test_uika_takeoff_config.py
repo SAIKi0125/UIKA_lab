@@ -206,16 +206,17 @@ def test_uika_takeoff_terminations_match_spring_jump():
     assert 'body_names="base"' in term_source
 
 
-def test_uika_takeoff_push_matches_huangcang_and_is_disabled_in_play():
+def test_uika_takeoff_push_matches_springjump_and_is_disabled_in_play():
     source = _read("tasks/locomotion/robots/uika/takeoff_env_cfg.py")
     reward_source = _read("tasks/locomotion/mdp/spring_jump.py")
     event_source = source.split("spring_jump_update = EventTerm(", 1)[1].split("class CommandsCfg", 1)[0]
     play_source = source.split("class TakeoffPlayEnvCfg", 1)[1]
 
-    assert reward_source.count("push_vel_z_range: tuple[float, float] = (0.5, 1.2)") == 2
-    assert '"push_vel_z_range": (0.5, 1.2)' in event_source
+    assert reward_source.count("push_vel_z_range: tuple[float, float] = (1.5, 2.2)") == 2
+    assert '"push_vel_z_range": (1.5, 2.2)' in event_source
     assert '"push_initial_prob": 0.8' in event_source
     assert '"push_decay_steps": 1200' in event_source
+    assert "current_prob = max(8 - int(step_count / float(push_decay_steps)), 0) / 10.0" in reward_source
     assert 'self.events.spring_jump_update.params["push_initial_prob"] = 0.0' in play_source
 
 
