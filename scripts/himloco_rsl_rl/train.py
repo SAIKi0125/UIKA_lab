@@ -40,9 +40,8 @@ sys.argv = [sys.argv[0]] + hydra_args
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-from isaacsim.core.utils.extensions import enable_extension
-
-enable_extension("isaacsim.asset.importer.urdf")
+# Isaac Lab pins the compatible URDF importer version when conversion starts.
+# Do not pre-enable the unversioned importer bundled with Isaac Sim 5.1.
 
 """Rest everything follows."""
 
