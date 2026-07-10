@@ -30,6 +30,24 @@ from himloco_lab.terrains.extreme_parkour import (
 
 UIKA_JOINT_NAMES = list(ROBOT_CFG.joint_sdk_names)
 
+UIKA_PACE_ACTUATOR_RANGES = {
+    "hip": {
+        "armature": (0.012499551, 0.014251016),
+        "viscous_friction": (0.000871807, 0.002837807),
+        "friction": (0.005748361, 0.018038273),
+    },
+    "thigh": {
+        "armature": (0.012442659, 0.014217399),
+        "viscous_friction": (0.001674354, 0.003362268),
+        "friction": (0.009873092, 0.022234440),
+    },
+    "calf": {
+        "armature": (0.022163186, 0.024222745),
+        "viscous_friction": (0.001198500, 0.002290815),
+        "friction": (0.007793665, 0.015262470),
+    },
+}
+
 COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
     size=(8.0, 8.0),
     border_width=25.0,
@@ -42,19 +60,19 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
     use_cache=True,
     sub_terrains={
         "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
-            proportion=0.05,
+            proportion=0.1,
             slope_range=(0.0, 0.4),
             platform_width=3.0,
             border_width=0.0,
         ),
         "hf_pyramid_slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
-            proportion=0.05,
+            proportion=0.1,
             slope_range=(0.0, 0.4),
             platform_width=3.0,
             border_width=0.0,
         ),
         "hf_slope_with_noise": him_terrains.HfPyramidSlopeWithNoiseCfg(
-            proportion=0.2,
+            proportion=0.3,
             slope_range=(0.0, 0.4),
             platform_width=3.0,
             border_width=0.0,
@@ -63,21 +81,21 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
             downsampled_scale=0.2,
         ),
         "pyramid_stairs": terrain_gen.MeshPyramidStairsTerrainCfg(
-            proportion=0.3,
+            proportion=0.0,
             step_height_range=(0.05, 0.23),
             step_width=0.30,
             platform_width=3.0,
             border_width=0.0,
         ),
         "pyramid_stairs_inv": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
-            proportion=0.3,
+            proportion=0.0,
             step_height_range=(0.05, 0.23),
             step_width=0.30,
             platform_width=3.0,
             border_width=0.0,
         ),
         "discrete_obstacles": him_terrains.HfDiscreteObstaclesTerrainCfg(
-            proportion=0.1,
+            proportion=0.5,
             max_height_range=(0.05, 0.15),
             obstacle_size_range=(1.0, 2.0),
             num_obstacles=20,
@@ -283,37 +301,64 @@ class EventCfg:
         },
     )
 
+    randomize_pace_hip = EventTerm(
+        func=mdp.randomize_actuator_group_parameters,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*_hip_joint"),
+            **UIKA_PACE_ACTUATOR_RANGES["hip"],
+        },
+    )
+
+    randomize_pace_thigh = EventTerm(
+        func=mdp.randomize_actuator_group_parameters,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*_thigh_joint"),
+            **UIKA_PACE_ACTUATOR_RANGES["thigh"],
+        },
+    )
+
+    randomize_pace_calf = EventTerm(
+        func=mdp.randomize_actuator_group_parameters,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*_calf_joint"),
+            **UIKA_PACE_ACTUATOR_RANGES["calf"],
+        },
+    )
+
     randomize_reset_base = EventTerm(
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
             "pose_range": {
-                # "x": (-0.5, 0.5),
-                # "y": (-0.5, 0.5),
-                # "z": (0.0, 0.2),
-                # "roll": (-3.14, 3.14),
-                # "pitch": (-3.14, 3.14),
-                # "yaw": (-3.14, 3.14),
-                "x": (-3.5, -3.5),
-                "y": (-1.0, 1.0),
-                "z": (0.0, 0.0),
-                "roll": (-0.0, 0.0),
-                "pitch": (-0.0, 0.0),
-                "yaw": (-0.0, 0.0),
+                "x": (-0.5, 0.5),
+                "y": (-0.5, 0.5),
+                "z": (0.0, 0.2),
+                "roll": (-3.14, 3.14),
+                "pitch": (-3.14, 3.14),
+                "yaw": (-3.14, 3.14),
+                # "x": (-3.5, -3.5),
+                # "y": (-1.0, 1.0),
+                # "z": (0.0, 0.0),
+                # "roll": (-0.0, 0.0),
+                # "pitch": (-0.0, 0.0),
+                # "yaw": (-0.0, 0.0),
             },
             "velocity_range": {
-                # "x": (-0.5, 0.5),
-                # "y": (-0.5, 0.5),
-                # "z": (-0.5, 0.5),
-                # "roll": (-0.5, 0.5),
-                # "pitch": (-0.5, 0.5),
-                # "yaw": (-0.5, 0.5),
-                "x": (-0.0, 0.0),
-                "y": (-0.0, 0.0),
-                "z": (-0.0, 0.0),
-                "roll": (-0.0, 0.0),
-                "pitch": (-0.0, 0.0),
-                "yaw": (-0.0, 0.0),
+                "x": (-0.5, 0.5),
+                "y": (-0.5, 0.5),
+                "z": (-0.5, 0.5),
+                "roll": (-0.5, 0.5),
+                "pitch": (-0.5, 0.5),
+                "yaw": (-0.5, 0.5),
+                # "x": (-0.0, 0.0),
+                # "y": (-0.0, 0.0),
+                # "z": (-0.0, 0.0),
+                # "roll": (-0.0, 0.0),
+                # "pitch": (-0.0, 0.0),
+                # "yaw": (-0.0, 0.0),
             },
         },
     )
@@ -473,7 +518,7 @@ class RewardsCfg:
         func=mdp.base_height_l2,
         weight=0.0,
         params={
-            "target_height": 0.3,
+            "target_height": 0.3357,
             "asset_cfg": SceneEntityCfg("robot", body_names="base"),
             "sensor_cfg": SceneEntityCfg("base_height_scanner"),
         },
@@ -484,7 +529,7 @@ class RewardsCfg:
         weight=0,
         params={"asset_cfg": SceneEntityCfg("robot", body_names="base")},
     )
-    upward = RewTerm(func=mdp.upward, weight=0.15)
+    upward = RewTerm(func=mdp.upward, weight=1.0)
 
     # ---------------------------------------------------------------------
     # Joint regularization
@@ -521,7 +566,7 @@ class RewardsCfg:
 
     joint_mirror = RewTerm(
         func=mdp.joint_mirror,
-        weight=-0.0,
+        weight=-0.1,
         params={
             "asset_cfg": SceneEntityCfg("robot"),
             "mirror_joints": [
@@ -563,12 +608,12 @@ class RewardsCfg:
     # Main task rewards: track commanded planar velocity and yaw rate.
     track_lin_vel_xy = RewTerm(
         func=mdp.track_lin_vel_xy_exp,
-        weight=1.0,
+        weight=3.0,
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
     track_ang_vel_z = RewTerm(
         func=mdp.track_ang_vel_z_exp,
-        weight=0.5,
+        weight=1.5,
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
 
@@ -579,7 +624,7 @@ class RewardsCfg:
     feet_air_time = RewTerm(
         func=mdp.feet_air_time,
         # weight=0.1,
-        weight=0.0,
+        weight=0.1,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "command_name": "base_velocity",
@@ -589,7 +634,7 @@ class RewardsCfg:
 
     feet_air_time_variance = RewTerm(
         func=mdp.feet_air_time_variance_penalty,
-        weight=-0.0,
+        weight=-1.0,
         # weight=0.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
     )
@@ -643,11 +688,11 @@ class RewardsCfg:
 
     feet_height_body = RewTerm(
         func=mdp.feet_height_body,
-        weight=0.0,
+        weight=-5.0,
         # weight=0.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            "target_height": -0.23,
+            "target_height": -0.20,
             "tanh_mult": 2.0,
             "command_name": "base_velocity",
         },
@@ -656,7 +701,7 @@ class RewardsCfg:
     feet_gait = RewTerm(
         func=mdp.GaitReward,
         # weight=0.0,
-        weight=0.0,
+        weight=0.5,
         params={
             "std": math.sqrt(0.5),
             "command_name": "base_velocity",
@@ -740,6 +785,14 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     events: EventCfg = EventCfg()
     curriculum: CurriculumCfg = CurriculumCfg()
 
+    def _configure_pace_actuators_for_play(self):
+        self.events.randomize_pace_hip = None
+        self.events.randomize_pace_thigh = None
+        self.events.randomize_pace_calf = None
+        for actuator in self.scene.robot.actuators.values():
+            actuator.min_delay = 2
+            actuator.max_delay = 2
+
     def __post_init__(self):
         """Post initialization."""
         self.decimation = 4
@@ -796,6 +849,7 @@ class RobotParkourEnvCfg(RobotEnvCfg):
 class RobotPlayEnvCfg(RobotEnvCfg):
     def __post_init__(self):
         super().__post_init__()
+        self._configure_pace_actuators_for_play()
         self.scene.num_envs = 64
 
         if self.scene.terrain.terrain_generator is not None:
@@ -819,6 +873,7 @@ class RobotPlayEnvCfg(RobotEnvCfg):
 class RobotParkourPlayEnvCfg(RobotParkourEnvCfg):
     def __post_init__(self):
         super().__post_init__()
+        self._configure_pace_actuators_for_play()
         self.scene.num_envs = 64
 
         self.curriculum.command_levels_lin_vel = None

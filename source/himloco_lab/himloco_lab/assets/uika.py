@@ -4,10 +4,42 @@ import os
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets.articulation import ArticulationCfg
-from isaaclab.actuators import DCMotorCfg
 from isaaclab.utils import configclass
 
+from himloco_lab.assets.delayed_motor import DelayedDCMotorCfg
+
 UIKA_ASSETS_DIR = os.path.join(os.path.dirname(__file__), "uika")
+
+_UIKA_MOTOR_LIMITS = {
+    "hip": (17.0, 28.80),
+    "thigh": (17.0, 28.80),
+    "calf": (31.7, 15.43),
+}
+
+
+def _make_uika_actuator_cfg(joint_name: str, joint_type: str) -> DelayedDCMotorCfg:
+    effort_limit, velocity_limit = _UIKA_MOTOR_LIMITS[joint_type]
+    return DelayedDCMotorCfg(
+        joint_names_expr=[joint_name],
+        effort_limit=effort_limit,
+        saturation_effort=effort_limit,
+        velocity_limit=velocity_limit,
+        stiffness=30.0,
+        damping=1.5,
+        friction=0.0,
+        dynamic_friction=0.0,
+        viscous_friction=0.0,
+        armature=0.0042,
+        min_delay=2,
+        max_delay=3,
+    )
+
+
+UIKA_ACTUATORS = {
+    f"{leg}_{joint_type}": _make_uika_actuator_cfg(f"{leg}_{joint_type}_joint", joint_type)
+    for joint_type in ("hip", "thigh", "calf")
+    for leg in ("FL", "FR", "RL", "RR")
+}
 
 
 @configclass
@@ -63,28 +95,7 @@ UIKA_CFG = UIKAArticulationCfg(
         },
         joint_vel={".*": 0.0},
     ),
-    actuators={
-        "hip_thigh": DCMotorCfg(
-            joint_names_expr=[".*_hip_joint", ".*_thigh_joint"],
-            effort_limit=17.0,
-            saturation_effort=17.0,
-            velocity_limit=28.80,
-            stiffness=30.0,
-            damping=1.0,
-            friction=0.0,
-            armature=0.0042,
-        ),
-        "calf": DCMotorCfg(
-            joint_names_expr=[".*_calf_joint"],
-            effort_limit=31.7,
-            saturation_effort=31.7,
-            velocity_limit=15.43,
-            stiffness=30.0,
-            damping=1.0,
-            friction=0.0,
-            armature=0.0042,
-        ),
-    },
+    actuators=UIKA_ACTUATORS,
     # fmt: off
     joint_sdk_names=[
         "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",

@@ -50,6 +50,10 @@ sys.argv = [sys.argv[0]] + hydra_args
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+from isaacsim.core.utils.extensions import enable_extension
+
+enable_extension("isaacsim.asset.importer.urdf")
+
 """Rest everything follows."""
 
 import gymnasium as gym

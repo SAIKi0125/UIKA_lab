@@ -7,6 +7,40 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.envs import ManagerBasedEnv
 
 
+def randomize_actuator_group_parameters(
+    env: ManagerBasedEnv,
+    env_ids: torch.Tensor | None,
+    armature: tuple[float, float],
+    friction: tuple[float, float],
+    viscous_friction: tuple[float, float],
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+):
+    """Randomize joint parameters independently within one actuator range group."""
+    asset: Articulation = env.scene[asset_cfg.name]
+
+    if env_ids is None:
+        env_ids = torch.arange(env.num_envs, device=asset.device)
+
+    joint_ids = asset_cfg.joint_ids
+    num_joints = asset.num_joints if isinstance(joint_ids, slice) else len(joint_ids)
+
+    def sample_independent(value_range: tuple[float, float]) -> torch.Tensor:
+        return torch.empty((len(env_ids), num_joints), device=asset.device).uniform_(*value_range)
+
+    armature_values = sample_independent(armature)
+    friction_values = sample_independent(friction)
+    viscous_friction_values = sample_independent(viscous_friction)
+
+    asset.write_joint_armature_to_sim(armature_values, joint_ids=joint_ids, env_ids=env_ids)
+    asset.write_joint_friction_coefficient_to_sim(
+        friction_values,
+        joint_dynamic_friction_coeff=friction_values,
+        joint_viscous_friction_coeff=viscous_friction_values,
+        joint_ids=joint_ids,
+        env_ids=env_ids,
+    )
+
+
 def apply_periodic_external_force_torque(
     env: ManagerBasedEnv,
     env_ids: torch.Tensor,

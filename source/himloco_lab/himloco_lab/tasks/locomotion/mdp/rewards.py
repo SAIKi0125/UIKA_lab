@@ -25,6 +25,26 @@ def _upright_gate(env: ManagerBasedRLEnv) -> torch.Tensor:
     return torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
 
 
+def _target_joint_pos(
+    asset: Articulation, joint_ids: list[int] | slice, target_joint_pos: dict[str, float] | None
+) -> torch.Tensor:
+    target_pos = asset.data.default_joint_pos[:, joint_ids]
+    if target_joint_pos is None:
+        return target_pos
+
+    if isinstance(joint_ids, slice):
+        selected_joint_ids = list(range(len(asset.joint_names)))[joint_ids]
+    else:
+        selected_joint_ids = joint_ids
+    joint_names = [asset.joint_names[int(joint_id)] for joint_id in selected_joint_ids]
+    target_values = torch.tensor(
+        [target_joint_pos[joint_name] for joint_name in joint_names],
+        dtype=asset.data.joint_pos.dtype,
+        device=asset.data.joint_pos.device,
+    )
+    return target_values.unsqueeze(0).expand_as(target_pos)
+
+
 def energy(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Penalize the energy used by the robot's joints."""
     asset: Articulation = env.scene[asset_cfg.name]
@@ -49,8 +69,12 @@ def stand_still(
     command_name: str = "base_velocity",
     command_threshold: float = 0.06,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    target_joint_pos: dict[str, float] | None = None,
 ) -> torch.Tensor:
-    reward = mdp.joint_deviation_l1(env, asset_cfg)
+    asset: Articulation = env.scene[asset_cfg.name]
+    joint_ids = asset_cfg.joint_ids if asset_cfg.joint_ids is not None else slice(None)
+    target_pos = _target_joint_pos(asset, joint_ids, target_joint_pos)
+    reward = torch.sum(torch.abs(asset.data.joint_pos[:, joint_ids] - target_pos), dim=1)
     cmd_norm = torch.norm(env.command_manager.get_command(command_name), dim=1)
     reward *= cmd_norm < command_threshold
     reward *= _upright_gate(env)
@@ -142,14 +166,16 @@ def joint_position_penalty(
     velocity_threshold: float,
     command_name: str = "base_velocity",
     command_threshold: float = 0.1,
+    target_joint_pos: dict[str, float] | None = None,
 ) -> torch.Tensor:
-    """Penalize joint position error from default on the articulation."""
+    """Penalize joint position error from a target posture on the articulation."""
     # extract the used quantities (to enable type-hinting)
     asset: Articulation = env.scene[asset_cfg.name]
     joint_ids = asset_cfg.joint_ids if asset_cfg.joint_ids is not None else slice(None)
     cmd = torch.linalg.norm(env.command_manager.get_command(command_name), dim=1)
     body_vel = torch.linalg.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
-    reward = torch.linalg.norm((asset.data.joint_pos[:, joint_ids] - asset.data.default_joint_pos[:, joint_ids]), dim=1)
+    target_pos = _target_joint_pos(asset, joint_ids, target_joint_pos)
+    reward = torch.linalg.norm((asset.data.joint_pos[:, joint_ids] - target_pos), dim=1)
     reward = torch.where(
         torch.logical_or(cmd > command_threshold, body_vel > velocity_threshold),
         reward,
@@ -166,14 +192,15 @@ def joint_pos_penalty(
     stand_still_scale: float,
     velocity_threshold: float,
     command_threshold: float,
+    target_joint_pos: dict[str, float] | None = None,
 ) -> torch.Tensor:
-    """Penalize joint position error from default on the articulation."""
+    """Penalize joint position error from a target posture on the articulation."""
     asset: Articulation = env.scene[asset_cfg.name]
     cmd = torch.linalg.norm(env.command_manager.get_command(command_name), dim=1)
     body_vel = torch.linalg.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
-    running_reward = torch.linalg.norm(
-        (asset.data.joint_pos[:, asset_cfg.joint_ids] - asset.data.default_joint_pos[:, asset_cfg.joint_ids]), dim=1
-    )
+    joint_ids = asset_cfg.joint_ids if asset_cfg.joint_ids is not None else slice(None)
+    target_pos = _target_joint_pos(asset, joint_ids, target_joint_pos)
+    running_reward = torch.linalg.norm((asset.data.joint_pos[:, joint_ids] - target_pos), dim=1)
     reward = torch.where(
         torch.logical_or(cmd > command_threshold, body_vel > velocity_threshold),
         running_reward,
@@ -411,6 +438,34 @@ def feet_contact_without_cmd(
     contact = contact_sensor.compute_first_contact(env.step_dt)[:, sensor_cfg.body_ids]
     reward = torch.sum(contact, dim=-1).float()
     reward *= torch.linalg.norm(env.command_manager.get_command(command_name), dim=1) < 0.1
+    reward *= _upright_gate(env)
+    return reward
+
+
+def feet_air_without_cmd(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    sensor_cfg: SceneEntityCfg,
+    command_threshold: float = 0.1,
+    contact_threshold: float = 1.0,
+) -> torch.Tensor:
+    """Penalize airborne feet when the velocity command is near zero."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    contact = (
+        contact_sensor.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0]
+        > contact_threshold
+    )
+    reward = torch.sum(~contact, dim=-1).float()
+    reward *= torch.linalg.norm(env.command_manager.get_command(command_name), dim=1) < command_threshold
+    reward *= _upright_gate(env)
+    return reward
+
+
+def single_foot_air_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, threshold: float = 0.25) -> torch.Tensor:
+    """Penalize each foot's continuous air time above a short swing allowance."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    air_time = contact_sensor.data.current_air_time[:, sensor_cfg.body_ids]
+    reward = torch.sum(torch.clamp(air_time - threshold, min=0.0), dim=1)
     reward *= _upright_gate(env)
     return reward
 

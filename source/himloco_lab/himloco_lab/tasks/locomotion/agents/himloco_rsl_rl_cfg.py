@@ -66,3 +66,8 @@ class UIKAPPORunnerCfg(HIMOnPolicyRunnerCfg):
         desired_kl=0.01,
         max_grad_norm=1.0,
     )
+
+
+@configclass
+class UIKALowerPPORunnerCfg(UIKAPPORunnerCfg):
+    experiment_name = "uika_lower"

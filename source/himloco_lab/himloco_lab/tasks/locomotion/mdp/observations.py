@@ -20,6 +20,21 @@ def base_external_force(
     return asset.permanent_wrench_composer.composed_force_as_torch[:, asset_cfg.body_ids, :].squeeze(1).clone()
 
 
+def joint_pos_rel_to_target(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg,
+    target_joint_pos: dict[str, float],
+) -> torch.Tensor:
+    """Return selected joint positions relative to a named target posture."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    target_values = torch.tensor(
+        [target_joint_pos[asset.joint_names[int(joint_id)]] for joint_id in asset_cfg.joint_ids],
+        dtype=asset.data.joint_pos.dtype,
+        device=asset.data.joint_pos.device,
+    )
+    return asset.data.joint_pos[:, asset_cfg.joint_ids] - target_values.unsqueeze(0)
+
+
 def height_scan_clip(
     env: ManagerBasedRLEnv, 
     sensor_cfg: SceneEntityCfg,
