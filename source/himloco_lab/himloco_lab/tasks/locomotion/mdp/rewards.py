@@ -376,6 +376,46 @@ def feet_height_body(
     return reward
 
 
+def feet_lift_body(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    asset_cfg: SceneEntityCfg,
+    minimum_height: float,
+    target_height: float,
+    tanh_mult: float,
+) -> torch.Tensor:
+    """Reward swing-foot lift in the body frame, capped at a target height."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    foot_pos_relative = asset.data.body_pos_w[:, asset_cfg.body_ids, :] - asset.data.root_pos_w.unsqueeze(1)
+    foot_vel_relative = asset.data.body_lin_vel_w[:, asset_cfg.body_ids, :] - asset.data.root_lin_vel_w.unsqueeze(1)
+
+    num_feet = len(asset_cfg.body_ids)
+    foot_pos_body = torch.zeros(env.num_envs, num_feet, 3, device=env.device)
+    foot_vel_body = torch.zeros_like(foot_pos_body)
+    for foot_idx in range(num_feet):
+        foot_pos_body[:, foot_idx, :] = math_utils.quat_apply_inverse(
+            asset.data.root_quat_w, foot_pos_relative[:, foot_idx, :]
+        )
+        foot_vel_body[:, foot_idx, :] = math_utils.quat_apply_inverse(
+            asset.data.root_quat_w, foot_vel_relative[:, foot_idx, :]
+        )
+
+    height_range = target_height - minimum_height
+    if height_range <= 0.0:
+        raise ValueError("target_height must be greater than minimum_height")
+
+    lift_progress = torch.clamp(
+        (foot_pos_body[:, :, 2] - minimum_height) / height_range,
+        min=0.0,
+        max=1.0,
+    )
+    swing_weight = torch.tanh(tanh_mult * torch.linalg.norm(foot_vel_body[:, :, :2], dim=2))
+    reward = torch.mean(lift_progress * swing_weight, dim=1)
+    reward *= torch.linalg.norm(env.command_manager.get_command(command_name), dim=1) > 0.1
+    reward *= _upright_gate(env)
+    return reward
+
+
 def foot_clearance_reward(
     env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, target_height: float, std: float, tanh_mult: float
 ) -> torch.Tensor:

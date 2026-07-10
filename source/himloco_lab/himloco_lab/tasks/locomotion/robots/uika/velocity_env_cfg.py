@@ -60,19 +60,19 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
     use_cache=True,
     sub_terrains={
         "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
-            proportion=0.1,
+            proportion=0.05,
             slope_range=(0.0, 0.4),
             platform_width=3.0,
             border_width=0.0,
         ),
         "hf_pyramid_slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
-            proportion=0.1,
+            proportion=0.05,
             slope_range=(0.0, 0.4),
             platform_width=3.0,
             border_width=0.0,
         ),
         "hf_slope_with_noise": him_terrains.HfPyramidSlopeWithNoiseCfg(
-            proportion=0.3,
+            proportion=0.2,
             slope_range=(0.0, 0.4),
             platform_width=3.0,
             border_width=0.0,
@@ -81,21 +81,21 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
             downsampled_scale=0.2,
         ),
         "pyramid_stairs": terrain_gen.MeshPyramidStairsTerrainCfg(
-            proportion=0.0,
+            proportion=0.3,
             step_height_range=(0.05, 0.23),
             step_width=0.30,
             platform_width=3.0,
             border_width=0.0,
         ),
         "pyramid_stairs_inv": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
-            proportion=0.0,
+            proportion=0.3,
             step_height_range=(0.05, 0.23),
             step_width=0.30,
             platform_width=3.0,
             border_width=0.0,
         ),
         "discrete_obstacles": him_terrains.HfDiscreteObstaclesTerrainCfg(
-            proportion=0.5,
+            proportion=0.1,
             max_height_range=(0.05, 0.15),
             obstacle_size_range=(1.0, 2.0),
             num_obstacles=20,
@@ -172,7 +172,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         prim_path="/World/ground",
         terrain_type="generator",
         terrain_generator=COBBLESTONE_ROAD_CFG,
-        max_init_terrain_level=5,
+        max_init_terrain_level=0,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
@@ -336,9 +336,9 @@ class EventCfg:
                 "x": (-0.5, 0.5),
                 "y": (-0.5, 0.5),
                 "z": (0.0, 0.2),
-                "roll": (-3.14, 3.14),
-                "pitch": (-3.14, 3.14),
-                "yaw": (-3.14, 3.14),
+                "roll": (-1, 1),
+                "pitch": (-1, 1),
+                "yaw": (-1, 1),
                 # "x": (-3.5, -3.5),
                 # "y": (-1.0, 1.0),
                 # "z": (0.0, 0.0),
@@ -395,8 +395,8 @@ class CommandsCfg:
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
         rel_standing_envs=0.02,
-        rel_heading_envs=1.0,
-        heading_command=True,
+        rel_heading_envs=0.0,
+        heading_command=False,
         heading_control_stiffness=0.5,
         debug_vis=True,
         ranges=mdp.UniformThresholdVelocityCommandCfg.Ranges(
@@ -529,7 +529,7 @@ class RewardsCfg:
         weight=0,
         params={"asset_cfg": SceneEntityCfg("robot", body_names="base")},
     )
-    upward = RewTerm(func=mdp.upward, weight=1.0)
+    upward = RewTerm(func=mdp.upward, weight=0.25)
 
     # ---------------------------------------------------------------------
     # Joint regularization
@@ -608,12 +608,12 @@ class RewardsCfg:
     # Main task rewards: track commanded planar velocity and yaw rate.
     track_lin_vel_xy = RewTerm(
         func=mdp.track_lin_vel_xy_exp,
-        weight=3.0,
+        weight=1.0,
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
     track_ang_vel_z = RewTerm(
         func=mdp.track_ang_vel_z_exp,
-        weight=1.5,
+        weight=0.5,
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
 
@@ -687,12 +687,12 @@ class RewardsCfg:
     )
 
     feet_height_body = RewTerm(
-        func=mdp.feet_height_body,
-        weight=-5.0,
-        # weight=0.0,
+        func=mdp.feet_lift_body,
+        weight=2.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            "target_height": -0.20,
+            "minimum_height": -0.30,
+            "target_height": -0.10,
             "tanh_mult": 2.0,
             "command_name": "base_velocity",
         },
@@ -756,20 +756,6 @@ class CurriculumCfg:
     terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
     command_levels_lin_vel = None
     command_levels_ang_vel = None
-    # command_levels_lin_vel = CurrTerm(
-    #     func=mdp.command_levels_lin_vel,
-    #     params={
-    #         "reward_term_name": "track_lin_vel_xy",
-    #         "range_multiplier": (0.1, 1.0),
-    #     },
-    # )
-    # command_levels_ang_vel = CurrTerm(
-    #     func=mdp.command_levels_ang_vel,
-    #     params={
-    #         "reward_term_name": "track_ang_vel_z",
-    #         "range_multiplier": (0.1, 1.0),
-    #     },
-    # )
 
 
 @configclass
