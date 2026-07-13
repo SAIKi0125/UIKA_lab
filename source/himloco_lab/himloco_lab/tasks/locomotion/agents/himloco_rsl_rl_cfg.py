@@ -69,5 +69,10 @@ class UIKAPPORunnerCfg(HIMOnPolicyRunnerCfg):
 
 
 @configclass
+class UIKAFlatPPORunnerCfg(UIKAPPORunnerCfg):
+    experiment_name = "uika_flat"
+
+
+@configclass
 class UIKALowerPPORunnerCfg(UIKAPPORunnerCfg):
     experiment_name = "uika_lower"

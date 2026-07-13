@@ -22,6 +22,27 @@ gym.register(
 )
 
 gym.register(
+    id="UIKA-Flat-Velocity",
+    entry_point="himloco_lab.envs:HimlocoManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.flat_env_cfg:FlatRobotEnvCfg",
+        "himloco_rsl_rl_cfg": f"himloco_lab.tasks.locomotion.agents.himloco_rsl_rl_cfg:UIKAFlatPPORunnerCfg",
+        "rsl_rl_cfg_entry_point": f"himloco_lab.tasks.locomotion.agents.rsl_rl_ppo_cfg:BasePPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="UIKA-Flat-Velocity-Play",
+    entry_point="himloco_lab.envs:HimlocoManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.flat_env_cfg:FlatRobotPlayEnvCfg",
+        "himloco_rsl_rl_cfg": f"himloco_lab.tasks.locomotion.agents.himloco_rsl_rl_cfg:UIKAFlatPPORunnerCfg",
+    },
+)
+
+gym.register(
     id="UIKA-Lower-Velocity",
     entry_point="himloco_lab.envs:HimlocoManagerBasedRLEnv",
     disable_env_checker=True,
