@@ -234,6 +234,7 @@ class LowerRewardsCfg(RewardsCfg):
 
     feet_air_time = None
     feet_air_time_variance = None
+    prolonged_swing = None
     feet_contact = None
     feet_contact_without_cmd = RewTerm(
         func=mdp.feet_contact_without_cmd,

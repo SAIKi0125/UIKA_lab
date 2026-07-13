@@ -639,6 +639,16 @@ class RewardsCfg:
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
     )
 
+    prolonged_swing = RewTerm(
+        func=mdp.prolonged_swing,
+        weight=-1.5,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "max_swing_time": 0.60,
+            "command_name": "base_velocity",
+        },
+    )
+
     feet_contact = RewTerm(
         func=mdp.feet_contact,
         weight=-0.0,
@@ -656,6 +666,17 @@ class RewardsCfg:
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "command_name": "base_velocity",
+        },
+    )
+
+    feet_air_without_cmd = RewTerm(
+        func=mdp.feet_air_without_cmd,
+        weight=-2.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "command_name": "base_velocity",
+            "command_threshold": 0.1,
+            "contact_threshold": 1.0,
         },
     )
 

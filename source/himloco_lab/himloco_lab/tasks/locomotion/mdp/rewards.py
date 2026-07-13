@@ -459,6 +459,22 @@ def feet_air_time(
     return reward
 
 
+def prolonged_swing(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    max_swing_time: float = 0.6,
+    command_name: str = "base_velocity",
+) -> torch.Tensor:
+    """Penalize feet that remain airborne beyond a normal swing window while moving."""
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    air_time = contact_sensor.data.current_air_time[:, sensor_cfg.body_ids]
+    excess = torch.clamp(air_time - max_swing_time, min=0.0)
+    penalty = torch.sum(torch.square(excess), dim=1)
+    penalty *= torch.linalg.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
+    penalty *= _upright_gate(env)
+    return penalty
+
+
 def feet_too_near(
     env: ManagerBasedRLEnv, threshold: float = 0.2, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:
