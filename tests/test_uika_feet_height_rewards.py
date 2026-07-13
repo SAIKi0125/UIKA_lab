@@ -65,22 +65,22 @@ def test_body_frame_height_mdp_functions_keep_distinct_semantics():
     assert "return reward" in lift_progress
 
 
-def test_velocity_registers_negative_height_error_and_positive_lift_terms():
+def test_velocity_registers_strong_height_error_and_disables_lift_term():
     assignments = _class_assignments(VELOCITY_CFG_PATH, "RewardsCfg")
     height_term = assignments["feet_height_body"]
     lift_term = assignments["feet_lift_body"]
 
     assert isinstance(height_term, ast.Call)
     assert _attribute_name(_keyword(height_term, "func")) == "mdp.feet_height_body"
-    assert ast.literal_eval(_keyword(height_term, "weight")) == -0.01
+    assert ast.literal_eval(_keyword(height_term, "weight")) == -5.0
     height_params = _params(height_term)
-    assert ast.literal_eval(height_params["target_height"]) == -0.20
+    assert ast.literal_eval(height_params["target_height"]) == -0.23
     assert ast.literal_eval(height_params["tanh_mult"]) == 2.0
     assert ast.literal_eval(height_params["command_name"]) == "base_velocity"
 
     assert isinstance(lift_term, ast.Call)
     assert _attribute_name(_keyword(lift_term, "func")) == "mdp.feet_lift_body"
-    assert ast.literal_eval(_keyword(lift_term, "weight")) == 2.0
+    assert ast.literal_eval(_keyword(lift_term, "weight")) == 0.0
     lift_params = _params(lift_term)
     assert ast.literal_eval(lift_params["minimum_height"]) == -0.30
     assert ast.literal_eval(lift_params["target_height"]) == -0.10

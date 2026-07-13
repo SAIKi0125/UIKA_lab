@@ -82,14 +82,14 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
         ),
         "pyramid_stairs": terrain_gen.MeshPyramidStairsTerrainCfg(
             proportion=0.3,
-            step_height_range=(0.05, 0.23),
+            step_height_range=(0.05, 0.15),
             step_width=0.30,
             platform_width=3.0,
             border_width=0.0,
         ),
         "pyramid_stairs_inv": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
             proportion=0.3,
-            step_height_range=(0.05, 0.23),
+            step_height_range=(0.05, 0.15),
             step_width=0.30,
             platform_width=3.0,
             border_width=0.0,
@@ -347,18 +347,18 @@ class EventCfg:
                 # "yaw": (-0.0, 0.0),
             },
             "velocity_range": {
-                "x": (-0.5, 0.5),
-                "y": (-0.5, 0.5),
-                "z": (-0.5, 0.5),
-                "roll": (-0.5, 0.5),
-                "pitch": (-0.5, 0.5),
-                "yaw": (-0.5, 0.5),
-                # "x": (-0.0, 0.0),
-                # "y": (-0.0, 0.0),
-                # "z": (-0.0, 0.0),
-                # "roll": (-0.0, 0.0),
-                # "pitch": (-0.0, 0.0),
-                # "yaw": (-0.0, 0.0),
+                # "x": (-0.5, 0.5),
+                # "y": (-0.5, 0.5),
+                # "z": (-0.5, 0.5),
+                # "roll": (-0.5, 0.5),
+                # "pitch": (-0.5, 0.5),
+                # "yaw": (-0.5, 0.5),
+                "x": (-0.0, 0.0),
+                "y": (-0.0, 0.0),
+                "z": (-0.0, 0.0),
+                "roll": (-0.0, 0.0),
+                "pitch": (-0.0, 0.0),
+                "yaw": (-0.0, 0.0),
             },
         },
     )
@@ -516,9 +516,9 @@ class RewardsCfg:
     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=0)
     base_height_l2 = RewTerm(
         func=mdp.base_height_l2,
-        weight=0.0,
+        weight=-0.0,
         params={
-            "target_height": 0.3357,
+            "target_height": 0.33,
             "asset_cfg": SceneEntityCfg("robot", body_names="base"),
             "sensor_cfg": SceneEntityCfg("base_height_scanner"),
         },
@@ -529,7 +529,7 @@ class RewardsCfg:
         weight=0,
         params={"asset_cfg": SceneEntityCfg("robot", body_names="base")},
     )
-    upward = RewTerm(func=mdp.upward, weight=0.25)
+    upward = RewTerm(func=mdp.upward, weight=0.5)
 
     # ---------------------------------------------------------------------
     # Joint regularization
@@ -566,7 +566,7 @@ class RewardsCfg:
 
     joint_mirror = RewTerm(
         func=mdp.joint_mirror,
-        weight=-0.1,
+        weight=-0.05,
         params={
             "asset_cfg": SceneEntityCfg("robot"),
             "mirror_joints": [
@@ -598,7 +598,7 @@ class RewardsCfg:
     contact_forces = RewTerm(
         func=mdp.contact_forces,
         # weight=-1.5e-4,
-        weight=0.0,
+        weight=-1.5e-4,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"), "threshold": 100.0},
     )
 
@@ -608,12 +608,12 @@ class RewardsCfg:
     # Main task rewards: track commanded planar velocity and yaw rate.
     track_lin_vel_xy = RewTerm(
         func=mdp.track_lin_vel_xy_exp,
-        weight=1.0,
+        weight=3.0,
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
     track_ang_vel_z = RewTerm(
         func=mdp.track_ang_vel_z_exp,
-        weight=0.5,
+        weight=1.5,
         params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
     )
 
@@ -709,10 +709,10 @@ class RewardsCfg:
 
     feet_height_body = RewTerm(
         func=mdp.feet_height_body,
-        weight=-0.01,
+        weight=-5.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            "target_height": -0.20,
+            "target_height": -0.23,
             "tanh_mult": 2.0,
             "command_name": "base_velocity",
         },
@@ -720,7 +720,7 @@ class RewardsCfg:
 
     feet_lift_body = RewTerm(
         func=mdp.feet_lift_body,
-        weight=2.0,
+        weight=0.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
             "minimum_height": -0.30,
