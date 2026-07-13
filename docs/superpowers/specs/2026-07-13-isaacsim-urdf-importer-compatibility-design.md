@@ -6,10 +6,13 @@ UIKA tasks spawn the robot from a URDF file. In the current `isaac_lab_50` Conda
 
 An explicit command-line workaround that adds the extension directory to `PYTHONPATH` and enables the Kit extension passes the original import point. The permanent solution should provide the same behavior inside this repository without modifying the external Isaac Lab checkout or reinstalling Isaac Sim.
 
+Headless train and play then pass, but default GUI play uses the external `isaaclab.python.kit` experience. Its `isaaclab.python-2.3.2` dependency requires URDF importer 2.4.31 exactly, while this Isaac Sim 5.0 installation only provides 2.4.19. Kit exits during dependency resolution before `SimulationApp` is usable. The repository therefore also needs a version-matched GUI experience for Isaac Sim 5.0.
+
 ## Goals
 
 - Make HimLoco train and play entry points automatically load the pip-installed URDF importer on Isaac Sim 5.0.
 - Require no manual `PYTHONPATH`, `--kit_args`, or extension commands from users.
+- Make default GUI play work without a manual `--experience` argument on Isaac Sim 5.0.
 - Preserve Isaac Lab's importer-version selection on Isaac Sim 5.1 and newer.
 - Keep configuration idempotent and preserve user-provided launch arguments.
 - Cover the compatibility behavior with tests that run without Isaac Sim, Kit, or a GPU.
@@ -24,13 +27,13 @@ An explicit command-line workaround that adds the extension directory to `PYTHON
 
 ## Considered Approaches
 
-### Repository startup compatibility module — selected
+### Repository compatibility module plus version-matched GUI experience — selected
 
-Add a small pure-Python module that runs before `AppLauncher` is imported. It discovers the pip extension location, exposes its Python module, and asks Kit to enable it. This keeps the fix local to the entry points that need it and remains testable without launching Kit.
+Add a small pure-Python module that runs before `AppLauncher` is imported. It discovers the pip extension location, exposes its Python module, asks Kit to enable it, and selects a repository-owned GUI experience for Isaac Sim 5.0. This keeps external Isaac Lab files untouched and makes the version decision testable without launching Kit.
 
-### Custom Kit experience
+### Modify the external Isaac Lab experience
 
-Add the importer dependency to a custom `.kit` experience. This makes Kit own extension activation, but duplicates upstream Isaac Lab launch configuration and creates an additional file that must track future Isaac Lab experience changes.
+Change `/home/esd/project/HuangCang-project/IsaacLab/apps/isaaclab.python.kit` to accept importer 2.4.19. This is smaller than carrying a local experience, but modifies an external dependency checkout and would be lost or conflict when Isaac Lab is updated.
 
 ### Preconverted UIKA USD
 
@@ -52,11 +55,16 @@ The module has focused private helpers for:
 - reading the installed Isaac Sim distribution version without importing Isaac Sim;
 - locating the URDF importer extension directory;
 - prepending one path to `sys.path` and `PYTHONPATH` without duplication;
-- adding the extension to AppLauncher's `--kit_args` without overwriting existing Kit arguments.
+- adding the extension to AppLauncher's `--kit_args` without overwriting existing Kit arguments;
+- selecting a repository-owned Isaac Sim 5.0 GUI experience without overriding headless or explicit experience choices.
+
+Add `scripts/himloco_rsl_rl/apps/isaaclab.python.isaacsim50.kit`, adapted from the external `isaaclab.python.kit`. It keeps the same GUI and Isaac Lab extension dependencies but requests the installed `isaacsim.asset.importer.urdf` without the unavailable exact 2.4.31 constraint. The file is intentionally version-specific; upgrades to the external Isaac Lab GUI experience must be compared against this local copy.
 
 ## Version Policy
 
 For Isaac Sim versions earlier than 5.1, the helper exposes and enables the installed unversioned extension `isaacsim.asset.importer.urdf`. This covers the current pip 5.0 environment, whose importer extension is version 2.4.19.
+
+For a non-headless Isaac Sim version earlier than 5.1, the helper also appends `--experience <repository Isaac Sim 5.0 GUI experience>` when no experience was supplied. Headless launches retain Isaac Lab's headless experience. An explicit `--experience` or `--experience=<path>` always wins.
 
 For Isaac Sim 5.1 and newer, the helper does not activate the unversioned importer. The installed Isaac Lab `UrdfConverter` is responsible for selecting its compatible importer version, currently 2.4.31. Avoiding early activation prevents the repository helper from defeating that upstream version pin.
 
@@ -74,14 +82,23 @@ When `--kit_args` already has a value, the helper appends the enable fragment to
 
 The helper updates both `sys.path` and `PYTHONPATH`: `sys.path` covers the current Python process, while `PYTHONPATH` preserves visibility for Python environments initialized by Kit during startup. Existing entries and their order are preserved after the newly required extension path.
 
+For a default GUI launch on Isaac Sim 5.0, configuration also appends:
+
+```text
+--experience scripts/himloco_rsl_rl/apps/isaaclab.python.isaacsim50.kit
+```
+
+The helper resolves this to an absolute path derived from its own file location. It does not depend on the current working directory.
+
 ## Data Flow
 
 1. The user starts `train.py` or `play.py` normally.
 2. The entry point invokes `configure_isaacsim_urdf_importer()`.
 3. The helper reads distribution metadata and determines whether the Isaac Sim 5.0 compatibility path applies.
 4. The helper locates the installed importer extension and updates Python and Kit launch state idempotently.
-5. `AppLauncher` starts Kit with the importer enabled.
-6. UIKA's `UrdfFileCfg` creates `UrdfConverter`, whose `_urdf` import now resolves normally.
+5. For an Isaac Sim 5.0 GUI launch without an explicit experience, the helper selects the repository-owned compatible GUI experience.
+6. `AppLauncher` starts Kit with the importer enabled and a satisfiable GUI dependency graph.
+7. UIKA's `UrdfFileCfg` creates `UrdfConverter`, whose `_urdf` import now resolves normally.
 
 ## Testing Strategy
 
@@ -96,8 +113,13 @@ Required regression cases:
 - Isaac Sim 5.1 or newer leaves paths and Kit arguments unchanged.
 - An unknown version or missing extension returns safely and emits one actionable warning.
 - Static entry-point tests prove train and play invoke compatibility setup before importing `AppLauncher`.
+- Isaac Sim 5.0 GUI launch selects the repository-owned experience.
+- Headless launch does not select the GUI experience.
+- Explicit `--experience <path>` and `--experience=<path>` remain unchanged.
+- Isaac Sim 5.1 or newer does not select the Isaac Sim 5.0 experience.
+- A missing repository GUI experience emits an actionable warning and leaves AppLauncher selection unchanged.
 
-After unit tests pass, a one-environment, one-iteration `UIKA-Flat-Velocity` startup is the integration smoke test. In restricted environments where GPU/NVML is unavailable, integration results must distinguish infrastructure failure from importer failure. Final acceptance requires the user's normal terminal environment to reach environment construction and begin one training iteration without `ModuleNotFoundError`.
+After unit tests pass, a one-environment, one-iteration `UIKA-Flat-Velocity` startup and a default GUI `UIKA-Flat-Velocity-Play` startup are the integration smoke tests. In restricted environments where GPU/NVML or a display is unavailable, integration results must distinguish infrastructure failure from importer failure. Final acceptance requires the user's normal terminal environment to reach training and visible playback without importer or Kit dependency-resolution errors.
 
 ## Acceptance Criteria
 
@@ -108,6 +130,13 @@ After unit tests pass, a one-environment, one-iteration `UIKA-Flat-Velocity` sta
   ```
 
 - The normal play entry point receives the same compatibility setup.
+- The default GUI play command reaches visible playback without manual compatibility arguments:
+
+  ```bash
+  python scripts/himloco_rsl_rl/play.py --task UIKA-Flat-Velocity-Play
+  ```
+
+- `--headless` and explicit `--experience` choices are never overridden.
 - All new unit tests and relevant existing tests pass.
 - Isaac Sim 5.1+ behavior remains delegated to Isaac Lab's version pin.
 - No external Isaac Lab or Conda-environment file is modified.
