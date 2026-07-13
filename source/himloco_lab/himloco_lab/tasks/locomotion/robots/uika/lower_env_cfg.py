@@ -270,6 +270,7 @@ class LowerRewardsCfg(RewardsCfg):
     )
     feet_height = None
     feet_height_body = None
+    feet_lift_body = None
     feet_gait = None
 
 

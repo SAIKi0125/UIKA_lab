@@ -687,6 +687,17 @@ class RewardsCfg:
     )
 
     feet_height_body = RewTerm(
+        func=mdp.feet_height_body,
+        weight=-0.01,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+            "target_height": -0.20,
+            "tanh_mult": 2.0,
+            "command_name": "base_velocity",
+        },
+    )
+
+    feet_lift_body = RewTerm(
         func=mdp.feet_lift_body,
         weight=2.0,
         params={
