@@ -36,15 +36,17 @@ No existing UIKA environment class is modified.
 
 ## Reward Semantics
 
-`RoughNormalGaitRewardsCfg` follows the effective lower reward recipe. It copies the lower overrides, including disabled terms, weights, thresholds, command gates, sensor/body selectors, and standard inherited reward behavior.
+`RoughNormalGaitRewardsCfg` follows the effective lower reward recipe. It copies the lower overrides, including disabled terms, weights, thresholds, command gates, sensor/body selectors, and standard inherited reward behavior, except for the explicitly approved normal-pose and foot-contact adaptations below.
 
-The only posture adaptations are:
+The only approved reward adaptations are:
 
 | Reward | Master lower value | New normal-gait value | Reason |
 |---|---:|---:|---|
 | `base_height_l2.target_height` | `0.25` | `0.33` | The new task uses normal standing height. |
 | `stand_still.target_joint_pos` | lower crouch map | current `UIKA_CFG.init_state.joint_pos` | Stand-still reference must match the normal action offset. |
 | `joint_pos_penalty.target_joint_pos` | lower crouch map | current `UIKA_CFG.init_state.joint_pos` | Moving/standing posture penalty must match the normal robot. |
+| `contact_forces` | disabled (`None`) | weight `-1e-2`, threshold `100 N`, feet only | Penalize excessive foot impact using the current normal-velocity tuning baseline. |
+| `feet_slide` | zero weight (`-0.0`) | weight `-0.1` | Penalize body-frame horizontal velocity of feet while in contact. |
 
 Key copied lower overrides include:
 
@@ -52,7 +54,8 @@ Key copied lower overrides include:
 - `joint_pos_limits=-1.0`, `stand_still=-2.0`, and `joint_pos_penalty=-0.3`;
 - `track_lin_vel_xy=1.0` and `track_ang_vel_z=0.5`;
 - `feet_air_without_cmd=-2.0` and `single_foot_air_time=-2.0` with `threshold=0.25`;
-- the same `None` or zero-weight settings for termination reward, joint velocity terms, joint mirror, contact-force penalty, air-time shaping, prolonged swing, foot height/lift, and gait synchronization terms.
+- the same `None` or zero-weight settings for termination reward, joint velocity terms, joint mirror, air-time shaping, prolonged swing, foot height/lift, and gait synchronization terms;
+- active `contact_forces=-1e-2` with a `100 N` threshold and active `feet_slide=-0.1` as deliberate additions requested after the initial design.
 
 The new config must not import or reference `UIKA_LOWER_JOINT_POS_TARGET`.
 
@@ -87,7 +90,7 @@ Implementation follows RED-GREEN-REFACTOR:
 2. Verify registration names and train/play entry points.
 3. Verify the training and play configs inherit the normal rough environment classes and replace only rewards.
 4. Verify `0.33 m` base height and normal `UIKA_CFG.init_state.joint_pos` references.
-5. Verify all copied lower override weights, parameters, and disabled terms.
+5. Verify all copied lower override weights, parameters, and disabled terms, plus the two approved contact adaptations.
 6. Verify the new source never references `UIKA_LOWER_JOINT_POS_TARGET`.
 7. Verify the isolated PPO experiment name.
 8. Run Python compilation and the relevant UIKA test suite.
@@ -99,3 +102,4 @@ Implementation follows RED-GREEN-REFACTOR:
 - Do not change the UIKA asset default pose, action scale, observation layout, terrain generator, events, commands, PPO hyperparameters, or reward function implementations.
 - Do not merge/rebase the dirty worktree or copy the old local `lower` branch implementation wholesale.
 - Do not claim gait quality before training curves and playback are evaluated.
+- Do not enable `feet_contact`; the requested impact term is `contact_forces`.
