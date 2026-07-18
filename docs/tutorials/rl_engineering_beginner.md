@@ -105,11 +105,11 @@ mkdir experiment    # 新建一个目录
 |---|---|
 | 操作系统 | Ubuntu 22.04 LTS |
 | Python | 3.11 |
-| Isaac Sim | 5.0.0 |
+| Isaac Sim | 5.1.0 |
 | Isaac Lab | 课程固定 commit `d94504bcf91cb7ab7ff956a2d48ecd1bca82797a` |
 | 项目 | 与本文档位于同一个 Git commit 的 `himloco_lab` |
 
-不要把版本号中的“旧”理解成“错误”。2026 年的最新 Isaac Lab 已经面向 Isaac Sim 6.x，但本项目包含 Isaac Sim 5.0/5.1 的兼容逻辑。入门课首先追求全班可复现；升级框架属于独立迁移任务。
+不要把版本号中的“旧”理解成“错误”。2026 年的最新 Isaac Lab 已经面向 Isaac Sim 6.x，但本课程固定的 Isaac Lab commit 原生对应 Isaac Sim 5.1。入门课首先追求全班可复现；升级框架属于独立迁移任务。当前开发工作区可能还包含面向 Isaac Sim 5.0 的兼容改动，但在这些改动正式提交并通过干净安装测试前，它们不属于课程基线。
 
 教师发布课程时应给项目 commit 打标签，并要求学生记录 `git rev-parse HEAD` 的输出。文档和代码必须一起冻结，不能只复制本文而继续使用其他版本的项目代码。
 
@@ -125,7 +125,9 @@ free -h
 df -h
 ```
 
-你在检查五件事：系统版本、GPU/驱动、GLIBC、内存、磁盘空间。Isaac Sim 5.0 的 pip 包要求 Python 3.11 和 GLIBC 2.35 以上；Ubuntu 22.04 满足对应 GLIBC 基线。
+你在检查五件事：系统版本、GPU/驱动、GLIBC、内存、磁盘空间。Isaac Sim 5.1 的 pip 包要求 Python 3.11 和 GLIBC 2.35 以上；Ubuntu 22.04 满足对应 GLIBC 基线。
+
+“有 NVIDIA 独显”不等于一定满足课程要求。NVIDIA 公布的 Isaac Sim 5.1 x86_64 最低档列出 32 GB RAM、50 GB SSD、GeForce RTX 4080 和 16 GB VRAM，并明确要求 GPU 具备 RT Core。更低配置的 RTX 显卡可能仍能运行低环境数实验，但属于非官方最低配置，必须先通过 compatibility checker 和本教程的 16 环境冒烟测试；未通过的机器不进入后续训练环节。
 
 如果 `nvidia-smi` 报错，先处理驱动，不要继续安装 Python 包。此时问题仍在“硬件/驱动层”，重装项目代码不能解决它。
 
@@ -136,8 +138,8 @@ conda 环境可以理解为一个独立的 Python 工具箱。不同项目把不
 安装 Miniconda 后创建课程环境：
 
 ```bash
-conda create -n isaac_lab_50 python=3.11
-conda activate isaac_lab_50
+conda create -n isaac_lab_51 python=3.11
+conda activate isaac_lab_51
 python --version
 which python
 ```
@@ -145,22 +147,23 @@ which python
 最后一条应指向类似下面的路径：
 
 ```text
-.../miniconda3/envs/isaac_lab_50/bin/python
+.../miniconda3/envs/isaac_lab_51/bin/python
 ```
 
 如果打开新终端后命令失效，首先重新执行：
 
 ```bash
-conda activate isaac_lab_50
+conda activate isaac_lab_51
 ```
 
-## 0.7 安装 Isaac Sim 5.0
+## 0.7 安装 Isaac Sim 5.1 与 CUDA 版 PyTorch
 
-在已激活的 `isaac_lab_50` 环境中执行：
+在已激活的 `isaac_lab_51` 环境中执行：
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install "isaacsim[all,extscache]==5.0.0" --extra-index-url https://pypi.nvidia.com
+python -m pip install "isaacsim[all,extscache]==5.1.0" --extra-index-url https://pypi.nvidia.com
+python -m pip install --upgrade torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128
 ```
 
 这里坚持使用 `python -m pip`，是为了明确把包安装到当前 `python` 所属环境。
@@ -169,9 +172,10 @@ python -m pip install "isaacsim[all,extscache]==5.0.0" --extra-index-url https:/
 
 ```bash
 python -c "import importlib.metadata as m; print(m.version('isaacsim'))"
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
 ```
 
-预期输出以 `5.0.0` 开头。第一次启动需要接受 NVIDIA EULA，也可能花较长时间准备扩展缓存；这不等同于程序卡死。
+Isaac Sim 版本应以 `5.1.0` 开头，PyTorch 版本应以 `2.7.0` 开头，最后一行必须是 `True`。如果 CUDA 检查为 `False`，不要继续安装项目；先确认驱动和 PyTorch wheel。第一次启动需要接受 NVIDIA EULA，也可能花较长时间准备扩展缓存；这不等同于程序卡死。
 
 ## 0.8 安装固定版本的 Isaac Lab
 
@@ -936,8 +940,8 @@ GPU
 - Junfeng Long et al., [Hybrid Internal Model: Learning Agile Legged Locomotion with Simulated Robot Response](https://arxiv.org/abs/2312.11460), ICLR 2024.
 - [HimLoco 项目主页](https://junfeng-long.github.io/HIMLoco/)
 - [HimLoco 官方代码](https://github.com/InternRobotics/HIMLoco)
-- [Isaac Sim 5.0 Python 环境安装](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/installation/install_python.html)
-- [Isaac Sim 5.0 系统要求](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/installation/requirements.html)
+- [Isaac Sim 5.1 Python 环境安装](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/install_python.html)
+- [Isaac Sim 5.1 系统要求](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/requirements.html)
 - [Isaac Lab RL 调试与训练指南](https://isaac-sim.github.io/IsaacLab/main/source/overview/reinforcement-learning/training_guide.html)
 
-阅读外部资料时先确认版本。网页的 `latest` 文档可能已经面向 Isaac Sim 6.x，不一定适用于本课程冻结的 5.0 工程线。
+阅读外部资料时先确认版本。网页的 `latest` 文档可能已经面向 Isaac Sim 6.x，不一定适用于本课程冻结的 5.1 工程线。
