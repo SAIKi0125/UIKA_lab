@@ -250,24 +250,7 @@ python -c "import importlib.metadata as m; print(m.version('isaacsim'))"
 
 预期输出以 `5.1.0` 开头。
 
-### 6.3 第一次启动 Isaac Sim
-
-运行：
-
-```bash
-isaacsim
-```
-
-第一次启动时会显示 NVIDIA Omniverse EULA。阅读后按提示接受，程序随后会准备扩展和缓存。第一次启动通常比后续启动慢。
-
-看到 Isaac Sim 图形窗口说明基础安装成功。关闭窗口后继续下一步。
-
-如果终端提示 `isaacsim: command not found`，先检查：
-
-```bash
-conda activate isaac_lab_51
-python -m pip show isaacsim
-```
+先不要启动 Isaac Sim。按官方安装顺序装好下一节的 CUDA 版 PyTorch，再进行第一次启动。
 
 ## 7. 安装 CUDA 版 PyTorch
 
@@ -296,6 +279,25 @@ python -c "import torch; print('PyTorch:', torch.__version__); print('CUDA avail
 - `GPU` 后显示实际显卡名称。
 
 如果 `CUDA available` 为 `False`，不要继续安装 Isaac Lab。先确认当前环境中的 PyTorch 是否来自 `cu128` 索引，并确认 `nvidia-smi` 能正常工作。
+
+### 7.1 第一次启动 Isaac Sim
+
+运行：
+
+```bash
+isaacsim
+```
+
+第一次启动时会显示 NVIDIA Omniverse EULA。阅读后按提示接受，程序随后会准备扩展和缓存。第一次启动通常比后续启动慢。
+
+看到 Isaac Sim 图形窗口说明基础安装成功。关闭窗口后继续下一步。
+
+如果终端提示 `isaacsim: command not found`，先检查：
+
+```bash
+conda activate isaac_lab_51
+python -m pip show isaacsim
+```
 
 ## 8. 安装 Isaac Lab v2.3.0
 
@@ -343,7 +345,13 @@ git describe --tags --always
 
 ### 8.3 安装 Isaac Lab
 
-确认 conda 环境仍然是 `isaac_lab_51`，然后在 Isaac Lab 根目录执行：
+Isaac Lab 的完整安装需要两个基础编译工具。先执行：
+
+```bash
+sudo apt install cmake build-essential
+```
+
+然后确认 conda 环境仍然是 `isaac_lab_51`，在 Isaac Lab 根目录执行：
 
 ```bash
 ./isaaclab.sh -i
