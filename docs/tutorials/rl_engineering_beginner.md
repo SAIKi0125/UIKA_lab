@@ -4,7 +4,7 @@
 
 教程使用 UIKA 四足机器人和 HimLoco 作为完整案例。完成环境配置后，你会依次理解并修改 observation、action、command、reward、termination、随机化和训练参数，最后能够设计一个可复现的对照实验。
 
-本文侧重“如何把 RL 跑起来并改对”，理论推导可配合课程视频或其他 RL 理论资料学习。
+本文侧重“如何把 RL 跑起来并改对”，理论推导可配合另行提供的视频或其他 RL 理论资料学习。
 
 ## 1. 开始前先确认版本
 
@@ -17,7 +17,7 @@
 | Isaac Sim | 5.1.0 |
 | PyTorch | 2.7.0，CUDA 12.8 构建 |
 | Isaac Lab | v2.3.0 |
-| 训练项目 | `himloco_lab` |
+| 训练项目 | UIKA Lab，提交 `c1af265` |
 
 开始前请确认：
 
@@ -88,7 +88,7 @@ conda --version
 如果输出类似：
 
 ```text
-conda 25.x.x
+conda x.y.z
 ```
 
 说明 conda 已经安装，可以跳到第 4 节。
@@ -102,6 +102,8 @@ conda 25.x.x
 ```bash
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 ```
+
+这里的 `latest` 只表示获取当前 Miniconda 安装器；项目使用的 Python 仍由下一节明确固定为 3.11。
 
 运行安装程序：
 
@@ -319,7 +321,29 @@ Isaac Sim 负责“物理世界”，Isaac Lab 负责“怎样把这个物理世
 - [Isaac Lab v2.3.0 pip 安装](https://isaac-sim.github.io/IsaacLab/v2.3.0/source/setup/installation/pip_installation.html)
 - [Isaac Lab：创建自己的项目或任务](https://isaac-sim.github.io/IsaacLab/v2.3.0/source/overview/own-project/index.html)
 
-### 8.2 获取 Isaac Lab 源码
+### 8.2 准备 Git
+
+Git 是版本控制工具。本教程用它下载 Isaac Lab 和 UIKA Lab，并记录每次实验对应的代码版本。
+
+检查 Git：
+
+```bash
+git --version
+```
+
+如果提示 `git: command not found`，执行：
+
+```bash
+sudo apt update
+sudo apt install git
+```
+
+官方资料：
+
+- [Pro Git：Git 是什么](https://git-scm.com/book/en/v2/Getting-Started-What-is-Git%3F)
+- [Pro Git：安装 Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
+
+### 8.3 获取 Isaac Lab 源码
 
 先选择一个专门保存项目的目录：
 
@@ -343,7 +367,7 @@ git describe --tags --always
 
 输出应包含 `v2.3.0`。
 
-### 8.3 安装 Isaac Lab
+### 8.4 安装 Isaac Lab
 
 Isaac Lab 的完整安装需要两个基础编译工具。先执行：
 
@@ -369,35 +393,16 @@ sudo apt install cmake build-essential
 
 ## 9. 安装 himloco_lab
 
-### 9.1 Git 是什么
-
-Git 是版本控制工具。本教程用它下载项目代码，并记录每次实验改了哪些文件。
-
-检查 Git：
-
-```bash
-git --version
-```
-
-如果没有安装 Git，可执行：
-
-```bash
-sudo apt update
-sudo apt install git
-```
-
-官方资料：
-
-- [Pro Git：Git 是什么](https://git-scm.com/book/en/v2/Getting-Started-What-is-Git%3F)
-- [Pro Git：安装 Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
-
-### 9.2 下载项目
+### 9.1 下载固定版本
 
 ```bash
 cd ~/projects
 git clone https://github.com/SAIKi0125/UIKA_lab.git himloco_lab
 cd himloco_lab
+git switch --create rl_course c1af2657f3c2f284429729a33407e59837ce5cad
 ```
+
+最后一条命令从本教程核对过的提交创建本地 `rl_course` 分支，避免远端默认分支更新后出现任务名或参数不一致。学习教程时不要把远端默认分支合并进来。
 
 确认当前目录：
 
@@ -408,7 +413,15 @@ ls
 
 `ls` 应能看到 `README.md`、`scripts`、`source` 和 `docs` 等内容。
 
-### 9.3 安装项目包
+检查项目版本：
+
+```bash
+git rev-parse --short HEAD
+```
+
+预期输出为 `c1af265`。
+
+### 9.2 安装项目包
 
 ```bash
 python -m pip install -e source/himloco_lab
@@ -442,8 +455,10 @@ Python 和 pip 路径都应包含 `envs/isaac_lab_51`。
 ### 10.2 检查关键包版本
 
 ```bash
-python -c "import importlib.metadata as m; print('Isaac Sim:', m.version('isaacsim')); print('Isaac Lab:', m.version('isaaclab')); print('PyTorch:', m.version('torch'))"
+python -c "import importlib.metadata as m; print('Isaac Sim:', m.version('isaacsim')); print('Isaac Lab package:', m.version('isaaclab')); print('PyTorch:', m.version('torch'))"
 ```
+
+这里的 `Isaac Lab package` 是已安装 Python 扩展包的版本。源码发布版本仍以第 8.3 节中 Isaac Lab 仓库的 `git describe` 输出为准，两项都应与 v2.3.0 兼容线一致。
 
 ### 10.3 检查 GPU 计算
 
@@ -458,7 +473,19 @@ python -c "import torch; x=torch.ones(3, device='cuda'); print(x); print(torch.c
 在 `himloco_lab` 根目录运行：
 
 ```bash
-python scripts/list_envs.py
+python - <<'PY'
+from isaaclab.app import AppLauncher
+
+simulation_app = AppLauncher(headless=True).app
+
+import gymnasium as gym
+import himloco_lab.tasks  # 注册 UIKA 任务
+
+for task_id in sorted(spec.id for spec in gym.registry.values() if spec.id.startswith("UIKA-")):
+    print(task_id)
+
+simulation_app.close()
+PY
 ```
 
 列表中至少应出现：
@@ -685,7 +712,7 @@ clip
 history_length = 5
 ```
 
-但 wrapper 将它解释为“当前帧 + 5 个过去帧”，因此实际共有 6 帧：
+这里的 `5` 表示历史区间长度 `H`。wrapper 按闭区间收集“当前帧 + 5 个过去时刻”，因此实际共有 6 帧：
 
 ```text
 单帧维度：45
@@ -693,7 +720,7 @@ history_length = 5
 历史输入维度：45 × 6 = 270
 ```
 
-这个例子说明：不要只根据变量名推断行为，要沿代码检查张量 shape。
+论文写作 `o_{t-H:t}`，当 `H=5` 时同样包含 6 帧。这个例子不是论文与代码的差异，而是提醒你：不要把 `history_length` 误读成张量的总帧数，要沿代码和公式检查 shape。
 
 ## 15. Action：12 个输出怎样控制关节
 
@@ -857,7 +884,7 @@ Actor MLP（64 维输入）
 | actor input | `HIMActorCritic.update_distribution()` |
 | HIO + PPO | `HIMPPO.update()` |
 
-论文和本仓库不是逐行一致的实现。例如论文默认历史长度 `H=5`，当前 wrapper 的 `history_length=5` 实际表示 6 帧；论文训练使用 100 步 rollout，当前 UIKA 配置使用每环境 24 步。工程判断应以本仓库实际代码和日志为准。
+论文和本仓库不是逐行一致的实现。两者的 `H=5` 都表示 `o_{t-H:t}` 的 6 帧闭区间；一个实际差异是论文训练使用 100 步 rollout，而当前 UIKA 配置使用每环境 24 步。工程判断应以本仓库实际代码和日志为准。
 
 ## 20. PPO 训练循环
 
@@ -917,10 +944,24 @@ python scripts/himloco_rsl_rl/train.py \
   --num_envs 256 \
   --max_iterations 100 \
   --headless \
-  --run_name first_train
+  --run_name short_log_demo
 ```
 
 如果出现 CUDA OOM，先关闭其他 Isaac Sim 进程，再降低 `--num_envs`。
+
+这条命令用于练习查看日志和 checkpoint。100 次迭代通常不足以让策略稳定行走，不要把它当作训练完成。
+
+准备正式训练时，使用单独的 run 名称，并从机器能够稳定承受的环境数开始。例如：
+
+```bash
+python scripts/himloco_rsl_rl/train.py \
+  --task UIKA-Flat-Velocity \
+  --num_envs 1024 \
+  --headless \
+  --run_name flat_baseline
+```
+
+不写 `--max_iterations` 时使用当前配置的上限 50000 次；这不是保证必须跑满的固定答案。项目每 100 次迭代保存一次模型。结合 mean reward、episode length、速度跟踪项和阶段性回放判断是否继续，而不要只看训练时间。
 
 环境数减少后，每轮收集的样本也会减少。因此 16 或 64 环境适合检查程序，不适合直接与 4096 环境的完整训练结果比较。
 
@@ -943,13 +984,13 @@ http://localhost:6006
 | 类别 | 关注内容 |
 |---|---|
 | 任务表现 | episode reward、速度跟踪、episode length |
-| PPO | surrogate loss、value loss、KL、learning rate |
+| PPO | surrogate loss、value loss、learning rate、mean noise std |
 | HimLoco | estimation loss、swap loss |
 | 性能 | FPS、collection time、learning time |
 
 不要要求所有 loss 单调下降。强化学习的数据分布会随策略变化。判断训练是否正常，需要结合长期趋势、是否出现 NaN、最终 checkpoint 回放以及各 reward term 的变化。
 
-## 23. 播放训练好的策略
+## 23. 播放 checkpoint
 
 训练日志默认保存在：
 
@@ -957,7 +998,18 @@ http://localhost:6006
 logs/himloco_rsl_rl/实验名/运行目录/
 ```
 
-播放最近的 flat 策略：
+推荐明确指定要检查的 run：
+
+```bash
+python scripts/himloco_rsl_rl/play.py \
+  --task UIKA-Flat-Velocity-Play \
+  --load_run 2026-01-01_12-00-00_flat_baseline \
+  --num_envs 4
+```
+
+将示例中的 run 目录替换为自己的实际名称。没有指定 checkpoint 文件时，脚本会从该 run 中选择匹配的最新模型。
+
+也可以省略 `--load_run`，让脚本播放 `uika_flat` 下名称排序最后的 run：
 
 ```bash
 python scripts/himloco_rsl_rl/play.py \
@@ -965,16 +1017,7 @@ python scripts/himloco_rsl_rl/play.py \
   --num_envs 4
 ```
 
-指定某次 run：
-
-```bash
-python scripts/himloco_rsl_rl/play.py \
-  --task UIKA-Flat-Velocity-Play \
-  --load_run 2026-01-01_12-00-00_first_train \
-  --num_envs 4
-```
-
-将示例中的 run 目录替换为自己的实际名称。没有指定 checkpoint 时，脚本会从该 run 中选择匹配的最新模型。
+这种便利写法可能选中最新的 smoke 或短练习目录，因此做正式比较时应显式写 `--load_run`。短练习 checkpoint 可以用来验证回放链路，但机器人不会因此必然已经学会稳定行走。
 
 回放时同时观察：
 
@@ -1056,13 +1099,7 @@ python -m pip install -e source/himloco_lab
 
 ## 26. 为什么找不到 task
 
-运行：
-
-```bash
-python scripts/list_envs.py
-```
-
-如果 UIKA task 不在列表中，检查：
+重新执行第 10.4 节的任务注册检查。如果 UIKA task 不在输出中，检查：
 
 - 是否位于正确仓库；
 - 项目是否安装到当前 conda 环境；

@@ -9,7 +9,7 @@
 - 单文件、自包含，读者无需先阅读 README 或课程设计；
 - 不出现教师发布流程、工作区状态、评分标准、提交要求或设计讨论；
 - 正文不教授 Ubuntu、终端基础或 NVIDIA 驱动，直接从 conda 和 RL 环境配置开始；
-- 在 RL 内容之前按依赖顺序讲清 conda、Python 环境、pip、Isaac Sim、CUDA PyTorch、Isaac Lab、Git 和本项目；
+- 在 RL 内容之前按依赖顺序讲清 conda、Python 环境、pip、Isaac Sim、CUDA PyTorch、Git、Isaac Lab 和本项目；
 - 每个环境组件先解释“是什么、为什么需要”，再提供版本固定的官方文档、安装命令、成功标准和常见失败；
 - 官方资料放在对应步骤旁边，文末只保留精简索引；
 - 使用 Isaac Sim 5.1 / Python 3.11 / Isaac Lab 2.3.0 兼容线，不使用会跳转到 Isaac Sim 6.x 的 `latest` 安装命令；
@@ -24,8 +24,8 @@
 4. 创建独立 Python 3.11 环境；
 5. pip 是什么，以及它与当前 conda 环境的关系；
 6. Isaac Sim 5.1 与 CUDA PyTorch；
-7. Isaac Lab 2.3.0；
-8. Git 与 `himloco_lab`；
+7. 准备 Git 并安装 Isaac Lab 2.3.0；
+8. 固定版本的 `himloco_lab`；
 9. 环境总验收和第一轮冒烟训练；
 10. RL 数据闭环及 observation/action/command/reward 等工程模块；
 11. HimLoco 论文—代码映射、训练诊断和常见问题。
@@ -127,7 +127,7 @@
 | dynamics randomization | `EventCfg` | 摩擦、质量、质心、执行器和扰动 |
 | terrain curriculum | `CurriculumCfg` | 难度如何随表现调整 |
 
-课程必须显式指出实现差异。例如，论文默认历史长度 `H=5`，而本仓库 wrapper 将 `history_length=5` 解释为“当前帧 + 5 个过去帧”，实际传入 estimator 的是 6 帧。这个差异应作为“不要只看变量名，要追踪张量”的工程案例。
+课程必须显式指出实现差异。例如，论文使用每环境 100 步 rollout，而本仓库 UIKA 配置使用 24 步。论文的 `o_{t-H:t}` 在 `H=5` 时本来就是“当前帧 + 5 个过去时刻”的 6 帧闭区间，与本仓库 wrapper 一致；这应作为“不要只看变量名，要同时追踪公式和张量”的工程案例，不能误写成实现差异。
 
 ## 7. 不同 GPU 的运行策略
 
