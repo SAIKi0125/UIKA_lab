@@ -1,229 +1,459 @@
 # 从零训练一只机器狗：UIKA 强化学习工程入门
 
-> 面向只学过基础 Python/C、第一次使用 Ubuntu 和强化学习框架的读者
+这是一份面向强化学习初学者的工程教程。你只需要会基础 Python 或 C 语言，不需要预先了解 PPO、Isaac Sim、Isaac Lab 或四足机器人控制。
 
-## 开始之前
+教程使用 UIKA 四足机器人和 HimLoco 作为完整案例。完成环境配置后，你会依次理解并修改 observation、action、command、reward、termination、随机化和训练参数，最后能够设计一个可复现的对照实验。
 
-这份教程不要求你先学完所有强化学习理论。你会一边运行 UIKA 四足机器人，一边认识 command、observation、action、reward、termination 和 PPO。理论视频与阅读材料由课程主页统一维护；本文只在需要时指出“现在应该先看哪类理论”。
+本文侧重“如何把 RL 跑起来并改对”，理论推导可配合课程视频或其他 RL 理论资料学习。
 
-学完后，你应该能独立回答并验证以下问题：
+## 1. 开始前先确认版本
 
-- `--task UIKA-Flat-Velocity` 最终加载了哪些 Python 类？
-- 策略每一步能看到什么，critic 为什么能看到更多信息？
-- 神经网络输出的 12 个数怎样变成关节目标角？
-- 机器人为什么会追踪速度、抬脚、少打滑？
-- 如何只改变一个因素，比较两次训练？
-- OOM、任务未注册、包导入失败和 NaN 应该从哪里查？
+强化学习仿真项目对版本非常敏感。本教程固定使用下面的软件组合，不要把命令中的版本号改成 `latest`。
 
-不要把“命令没有报错”等同于“实验成功”。本课程区分三层结果：
-
-1. **程序成功**：环境能够创建，训练循环能够执行；
-2. **学习成功**：策略指标随训练发生合理变化；
-3. **任务成功**：回放行为满足预先定义的工程目标。
-
----
-
-## 课程地图
-
-| 课次 | 主题 | 你要解决的问题 | 主要文件 |
-|---|---|---|---|
-| 0 | Ubuntu 与环境 | 如何证明电脑能运行课程项目？ | 本章命令 |
-| 1 | 第一次训练 | 一条训练命令背后发生了什么？ | `train.py`、任务注册 |
-| 2 | RL 数据闭环 | 一步仿真中数据怎样流动？ | env、wrapper、runner |
-| 3 | Scene 与 task | UIKA、地形和传感器从哪里来？ | `velocity_env_cfg.py` |
-| 4 | Observation | actor 和 critic 分别看到了什么？ | `ObservationsCfg` |
-| 5 | Action | 网络输出怎样控制 12 个关节？ | `ActionsCfg`、`uika.py` |
-| 6 | Command | “向前走”如何成为训练任务？ | `CommandsCfg` |
-| 7 | Reward | 为什么机器人会形成某种行为？ | `RewardsCfg`、`rewards.py` |
-| 8 | Termination/Event/Curriculum | 何时重置，为什么环境每次不同？ | 三类 manager 配置 |
-| 9 | HimLoco 与 PPO | 论文中的 HIM 和 PPO落在何处？ | estimator、actor、PPO |
-| 10 | 综合实验 | 如何有证据地改进一个行为？ | 完整实验链路 |
-
-建议每次课都保留四样东西：你的预测、完整命令、实验日志、对结果的解释。
-
----
-
-# 第 0 课：Ubuntu、终端与可复现环境
-
-## 0.1 本节完成标准
-
-本节结束时，你需要提交一份环境验收记录，其中每条命令都有输出，并满足：
-
-- Ubuntu 为课程指定版本；
-- `nvidia-smi` 能识别 NVIDIA GPU；
-- 当前终端使用课程 conda 环境中的 Python；
-- Isaac Sim、Isaac Lab 和 `himloco_lab` 都能被同一个 Python 找到；
-- `scripts/list_envs.py` 能列出 UIKA 任务；
-- 16 个并行环境能够完成 1 次训练迭代。
-
-## 0.2 先学会读一条命令
-
-打开终端后，你通常会看到类似下面的提示符：
-
-```text
-student@computer:~/project$
-```
-
-`$` 前面是提示信息，不需要输入。下面这条命令由三部分组成：
-
-```bash
-python scripts/himloco_rsl_rl/train.py --task UIKA-Flat-Velocity
-```
-
-- `python`：要运行的程序；
-- `scripts/himloco_rsl_rl/train.py`：交给 Python 的脚本路径；
-- `--task UIKA-Flat-Velocity`：传给脚本的选项和值。
-
-本教程中：
-
-- 代码块里的命令可以输入终端；
-- `#` 后面是解释，不是命令的必要部分；
-- 不理解的命令先查含义，不要在路径开头随意加 `sudo`。
-
-## 0.3 五个够用的 Ubuntu 命令
-
-```bash
-pwd                 # 我现在位于哪个目录？
-ls                  # 当前目录有哪些文件？
-cd path/to/folder   # 进入一个目录
-cd ..               # 回到上一级目录
-mkdir experiment    # 新建一个目录
-```
-
-路径有两种写法：
-
-- `/home/student/project` 是绝对路径，从系统根目录 `/` 开始；
-- `scripts/train.py` 是相对路径，从当前目录开始。
-
-训练前先运行 `pwd` 和 `ls`。如果当前目录不是 `himloco_lab` 仓库根目录，相对路径就可能找不到。
-
-## 0.4 课程冻结的软件栈
-
-本仓库当前工程线使用以下基线：
-
-| 组件 | 课程基线 |
+| 组件 | 本教程版本 |
 |---|---|
 | 操作系统 | Ubuntu 22.04 LTS |
 | Python | 3.11 |
 | Isaac Sim | 5.1.0 |
-| Isaac Lab | 课程固定 commit `d94504bcf91cb7ab7ff956a2d48ecd1bca82797a` |
-| 项目 | 与本文档位于同一个 Git commit 的 `himloco_lab` |
+| PyTorch | 2.7.0，CUDA 12.8 构建 |
+| Isaac Lab | v2.3.0 |
+| 训练项目 | `himloco_lab` |
 
-不要把版本号中的“旧”理解成“错误”。2026 年的最新 Isaac Lab 已经面向 Isaac Sim 6.x，但本课程固定的 Isaac Lab commit 原生对应 Isaac Sim 5.1。入门课首先追求全班可复现；升级框架属于独立迁移任务。当前开发工作区可能还包含面向 Isaac Sim 5.0 的兼容改动，但在这些改动正式提交并通过干净安装测试前，它们不属于课程基线。
+开始前请确认：
 
-教师发布课程时应给项目 commit 打标签，并要求学生记录 `git rev-parse HEAD` 的输出。文档和代码必须一起冻结，不能只复制本文而继续使用其他版本的项目代码。
+- 电脑安装了 Ubuntu 22.04；
+- NVIDIA GPU 可以正常使用；
+- `nvidia-smi` 能显示显卡信息；
+- 至少准备 50 GB 可用磁盘空间；
+- 网络可以访问 GitHub、PyPI 和 NVIDIA Python Package Index。
 
-## 0.5 安装前检查
+确认上述条件后，直接从 conda 环境开始。
 
-先执行：
+## 2. 先看懂整套环境的关系
 
-```bash
-lsb_release -ds
-nvidia-smi
-ldd --version
-free -h
-df -h
+后面会安装多个名字相似的工具。它们的关系如下：
+
+```text
+conda 环境
+└── Python 3.11
+    ├── pip
+    ├── Isaac Sim 5.1      物理仿真器
+    ├── PyTorch 2.7        神经网络与 GPU 计算
+    ├── Isaac Lab 2.3      机器人学习框架
+    └── himloco_lab        本教程的 UIKA 训练项目
 ```
 
-你在检查五件事：系统版本、GPU/驱动、GLIBC、内存、磁盘空间。Isaac Sim 5.1 的 pip 包要求 Python 3.11 和 GLIBC 2.35 以上；Ubuntu 22.04 满足对应 GLIBC 基线。
+可以把它们理解为：
 
-“有 NVIDIA 独显”不等于一定满足课程要求。NVIDIA 公布的 Isaac Sim 5.1 x86_64 最低档列出 32 GB RAM、50 GB SSD、GeForce RTX 4080 和 16 GB VRAM，并明确要求 GPU 具备 RT Core。更低配置的 RTX 显卡可能仍能运行低环境数实验，但属于非官方最低配置，必须先通过 compatibility checker 和本教程的 16 环境冒烟测试；未通过的机器不进入后续训练环节。
+- **conda**：为项目准备一个与其他项目隔离的工具箱；
+- **Python**：运行训练代码的语言环境；
+- **pip**：把 Python 软件包装进当前工具箱；
+- **Isaac Sim**：负责机器人、地形、关节和接触的物理仿真；
+- **PyTorch**：负责神经网络和 GPU 张量计算；
+- **Isaac Lab**：在 Isaac Sim 上组织机器人、传感器、强化学习环境和并行仿真；
+- **himloco_lab**：定义 UIKA 机器人任务、HimLoco 网络和训练流程。
 
-如果 `nvidia-smi` 报错，先处理驱动，不要继续安装 Python 包。此时问题仍在“硬件/驱动层”，重装项目代码不能解决它。
+安装必须按这个顺序进行。上一层没有验证成功时，不要继续安装下一层。
 
-## 0.6 conda 是什么
+---
 
-conda 环境可以理解为一个独立的 Python 工具箱。不同项目把不同版本的 Python 和包放在各自工具箱中，避免互相覆盖。
+# 第一部分：配置 RL 环境
 
-安装 Miniconda 后创建课程环境：
+## 3. conda 是什么
+
+同一台电脑上，不同项目可能需要不同版本的 Python 和 PyTorch。如果把所有软件都安装到系统 Python 中，升级一个项目时很容易破坏另一个项目。
+
+conda 可以创建彼此隔离的环境。例如：
+
+```text
+base                conda 自己的基础环境
+isaac_lab_51        本教程使用的 Python 3.11 环境
+another_project     另一个项目自己的环境
+```
+
+本教程使用轻量的 Miniconda。官方资料：
+
+- [Miniconda 官方页面](https://docs.conda.io/miniconda.html)
+- [conda 官方 Linux 安装说明](https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html)
+- [conda 入门指南](https://docs.conda.io/projects/conda/en/latest/user-guide/getting-started.html)
+
+### 3.1 检查 conda 是否已经安装
+
+打开终端，运行：
+
+```bash
+conda --version
+```
+
+如果输出类似：
+
+```text
+conda 25.x.x
+```
+
+说明 conda 已经安装，可以跳到第 4 节。
+
+如果提示 `conda: command not found`，继续安装 Miniconda。
+
+### 3.2 安装 Miniconda
+
+下载 Linux x86_64 安装脚本：
+
+```bash
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+```
+
+运行安装程序：
+
+```bash
+bash Miniconda3-latest-Linux-x86_64.sh
+```
+
+安装过程中：
+
+1. 按 Enter 阅读许可协议；
+2. 输入 `yes` 接受协议；
+3. 安装路径不确定时使用默认值；
+4. 询问是否初始化 conda 时输入 `yes`。
+
+安装完成后关闭并重新打开终端，再运行：
+
+```bash
+conda --version
+```
+
+如果仍然找不到 conda，可以执行：
+
+```bash
+source ~/.bashrc
+```
+
+然后再次检查。
+
+## 4. 创建独立的 Python 环境
+
+创建名为 `isaac_lab_51` 的环境，并指定 Python 3.11：
 
 ```bash
 conda create -n isaac_lab_51 python=3.11
+```
+
+看到确认提示时输入 `y`。创建完成后激活环境：
+
+```bash
 conda activate isaac_lab_51
+```
+
+激活成功后，终端提示符前面通常会出现：
+
+```text
+(isaac_lab_51)
+```
+
+检查 Python：
+
+```bash
 python --version
 which python
 ```
 
-最后一条应指向类似下面的路径：
+预期结果：
 
-```text
-.../miniconda3/envs/isaac_lab_51/bin/python
-```
+- Python 版本以 `3.11` 开头；
+- Python 路径包含 `envs/isaac_lab_51`。
 
-如果打开新终端后命令失效，首先重新执行：
+以后每次打开新终端，都要先执行：
 
 ```bash
 conda activate isaac_lab_51
 ```
 
-## 0.7 安装 Isaac Sim 5.1 与 CUDA 版 PyTorch
+如果忘记激活环境，后面安装的软件可能进入错误的 Python 环境。
 
-在已激活的 `isaac_lab_51` 环境中执行：
+## 5. pip 是什么
+
+pip 是 Python 的软件包安装工具。它可以从 Python Package Index（PyPI）或指定的软件源下载并安装 Python 包。
+
+最常见的命令是：
+
+```bash
+python -m pip install 包名
+```
+
+本教程始终写成 `python -m pip`，而不是只写 `pip`。这样可以明确告诉系统：使用“当前这个 Python”对应的 pip，避免把包安装到其他 conda 环境。
+
+例如：
+
+```bash
+python -m pip install "some-package==1.2.3"
+```
+
+其中：
+
+- `install` 表示安装；
+- `some-package` 是包名；
+- `==1.2.3` 表示必须安装指定版本。
+
+官方资料：
+
+- [Python Packaging User Guide：安装 Python 包](https://packaging.python.org/en/latest/tutorials/installing-packages/)
+- [pip 官方文档](https://pip.pypa.io/en/stable/)
+
+先升级当前环境中的 pip：
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install "isaacsim[all,extscache]==5.1.0" --extra-index-url https://pypi.nvidia.com
-python -m pip install --upgrade torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128
 ```
 
-这里坚持使用 `python -m pip`，是为了明确把包安装到当前 `python` 所属环境。
+检查 pip 属于哪个 Python：
 
-验证版本：
+```bash
+python -m pip --version
+```
+
+输出路径应包含 `envs/isaac_lab_51`。
+
+## 6. 安装 Isaac Sim 5.1
+
+### 6.1 Isaac Sim 是什么
+
+Isaac Sim 是 NVIDIA 的机器人仿真平台。它负责：
+
+- 加载 UIKA 的 URDF 和网格模型；
+- 模拟关节、电机、重力和碰撞；
+- 生成地形与传感器数据；
+- 在 GPU 上并行运行许多机器人环境。
+
+本项目固定使用 Isaac Sim 5.1。请使用版本页面，不要照抄 `latest` 页面中的 6.x 命令。
+
+官方资料：
+
+- [Isaac Sim 5.1 安装总览](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/index.html)
+- [Isaac Sim 5.1 Python/pip 安装](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/install_python.html)
+- [Isaac Sim 5.1 系统要求](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/requirements.html)
+
+### 6.2 安装 Isaac Sim
+
+确认终端前面有 `(isaac_lab_51)`，然后执行：
+
+```bash
+python -m pip install "isaacsim[all,extscache]==5.1.0" --extra-index-url https://pypi.nvidia.com
+```
+
+这个包体积很大，安装时间取决于网络和磁盘速度。`extscache` 会同时安装常用扩展缓存，减少第一次运行时的在线下载。
+
+安装完成后检查版本：
 
 ```bash
 python -c "import importlib.metadata as m; print(m.version('isaacsim'))"
-python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
 ```
 
-Isaac Sim 版本应以 `5.1.0` 开头，PyTorch 版本应以 `2.7.0` 开头，最后一行必须是 `True`。如果 CUDA 检查为 `False`，不要继续安装项目；先确认驱动和 PyTorch wheel。第一次启动需要接受 NVIDIA EULA，也可能花较长时间准备扩展缓存；这不等同于程序卡死。
+预期输出以 `5.1.0` 开头。
 
-## 0.8 安装固定版本的 Isaac Lab
+### 6.3 第一次启动 Isaac Sim
 
-选择一个专门放代码的目录：
+运行：
+
+```bash
+isaacsim
+```
+
+第一次启动时会显示 NVIDIA Omniverse EULA。阅读后按提示接受，程序随后会准备扩展和缓存。第一次启动通常比后续启动慢。
+
+看到 Isaac Sim 图形窗口说明基础安装成功。关闭窗口后继续下一步。
+
+如果终端提示 `isaacsim: command not found`，先检查：
+
+```bash
+conda activate isaac_lab_51
+python -m pip show isaacsim
+```
+
+## 7. 安装 CUDA 版 PyTorch
+
+PyTorch 负责神经网络训练和 GPU 张量计算。Isaac Lab v2.3.0 的 x86_64 安装文档为这一软件组合指定 PyTorch 2.7.0 和 CUDA 12.8 wheel。
+
+官方安装依据：
+
+- [Isaac Lab v2.3.0：使用 Isaac Sim pip 包安装](https://isaac-sim.github.io/IsaacLab/v2.3.0/source/setup/installation/pip_installation.html)
+
+执行：
+
+```bash
+python -m pip install --upgrade torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128
+```
+
+验证 PyTorch 和 CUDA：
+
+```bash
+python -c "import torch; print('PyTorch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')"
+```
+
+正确结果应满足：
+
+- PyTorch 版本以 `2.7.0` 开头；
+- `CUDA available` 为 `True`；
+- `GPU` 后显示实际显卡名称。
+
+如果 `CUDA available` 为 `False`，不要继续安装 Isaac Lab。先确认当前环境中的 PyTorch 是否来自 `cu128` 索引，并确认 `nvidia-smi` 能正常工作。
+
+## 8. 安装 Isaac Lab v2.3.0
+
+### 8.1 Isaac Lab 是什么
+
+Isaac Lab 是构建在 Isaac Sim 上的机器人学习框架。它提供：
+
+- 机器人和场景配置；
+- observation、action、reward 等 manager；
+- 大规模并行强化学习环境；
+- 与不同 RL 算法库连接的接口；
+- 训练、回放和测试工具。
+
+Isaac Sim 负责“物理世界”，Isaac Lab 负责“怎样把这个物理世界组织成一个学习任务”。
+
+官方资料：
+
+- [Isaac Lab v2.3.0 文档](https://isaac-sim.github.io/IsaacLab/v2.3.0/)
+- [Isaac Lab v2.3.0 pip 安装](https://isaac-sim.github.io/IsaacLab/v2.3.0/source/setup/installation/pip_installation.html)
+- [Isaac Lab：创建自己的项目或任务](https://isaac-sim.github.io/IsaacLab/v2.3.0/source/overview/own-project/index.html)
+
+### 8.2 获取 Isaac Lab 源码
+
+先选择一个专门保存项目的目录：
 
 ```bash
 mkdir -p ~/projects
 cd ~/projects
-git clone https://github.com/isaac-sim/IsaacLab.git
+```
+
+克隆固定版本：
+
+```bash
+git clone --branch v2.3.0 --depth 1 https://github.com/isaac-sim/IsaacLab.git
 cd IsaacLab
-git checkout d94504bcf91cb7ab7ff956a2d48ecd1bca82797a
+```
+
+检查版本：
+
+```bash
+git describe --tags --always
+```
+
+输出应包含 `v2.3.0`。
+
+### 8.3 安装 Isaac Lab
+
+确认 conda 环境仍然是 `isaac_lab_51`，然后在 Isaac Lab 根目录执行：
+
+```bash
 ./isaaclab.sh -i
 ```
 
-验证当前 commit：
+安装完成后，运行官方空场景示例：
 
 ```bash
-git rev-parse HEAD
+./isaaclab.sh -p scripts/tutorials/00_sim/create_empty.py
 ```
 
-验证 Isaac Lab 能创建应用：
+看到 Isaac Sim 窗口且程序没有 Python 异常，说明 Isaac Lab 已经能调用 Isaac Sim。
+
+关闭仿真窗口后再继续，避免多个 Isaac Sim 进程同时占用显存。
+
+## 9. 安装 himloco_lab
+
+### 9.1 Git 是什么
+
+Git 是版本控制工具。本教程用它下载项目代码，并记录每次实验改了哪些文件。
+
+检查 Git：
 
 ```bash
-python scripts/tutorials/00_sim/create_empty.py
+git --version
 ```
 
-出现 Isaac Sim 窗口并能正常关闭，说明 Isaac Sim 与 Isaac Lab 的基本连接成立。关闭仿真后再继续，避免多个 Isaac Sim 进程占用显存。
+如果没有安装 Git，可执行：
 
-## 0.9 安装本项目
+```bash
+sudo apt update
+sudo apt install git
+```
 
-回到代码目录，克隆课程指定仓库：
+官方资料：
+
+- [Pro Git：Git 是什么](https://git-scm.com/book/en/v2/Getting-Started-What-is-Git%3F)
+- [Pro Git：安装 Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
+
+### 9.2 下载项目
 
 ```bash
 cd ~/projects
 git clone https://github.com/SAIKi0125/UIKA_lab.git himloco_lab
 cd himloco_lab
+```
+
+确认当前目录：
+
+```bash
+pwd
+ls
+```
+
+`ls` 应能看到 `README.md`、`scripts`、`source` 和 `docs` 等内容。
+
+### 9.3 安装项目包
+
+```bash
 python -m pip install -e source/himloco_lab
 ```
 
-`-e` 表示 editable install。修改 `source/himloco_lab` 下的 Python 代码后，一般不需要重复安装。
+`-e` 表示 editable install。以后修改 `source/himloco_lab` 中的 Python 文件，一般不需要重新安装。
 
-查看项目任务：
+检查项目是否能被 Python 找到：
+
+```bash
+python -c "import himloco_lab; print(himloco_lab.__file__)"
+```
+
+输出路径应指向刚刚克隆的 `himloco_lab/source/himloco_lab`。
+
+## 10. 环境总验收
+
+不要只凭“安装命令没有报错”判断成功。按顺序执行下面的检查。
+
+### 10.1 检查当前 Python 环境
+
+```bash
+conda activate isaac_lab_51
+python --version
+which python
+python -m pip --version
+```
+
+Python 和 pip 路径都应包含 `envs/isaac_lab_51`。
+
+### 10.2 检查关键包版本
+
+```bash
+python -c "import importlib.metadata as m; print('Isaac Sim:', m.version('isaacsim')); print('Isaac Lab:', m.version('isaaclab')); print('PyTorch:', m.version('torch'))"
+```
+
+### 10.3 检查 GPU 计算
+
+```bash
+python -c "import torch; x=torch.ones(3, device='cuda'); print(x); print(torch.cuda.get_device_name(0))"
+```
+
+如果能输出 CUDA tensor 和显卡名称，说明 PyTorch GPU 计算可用。
+
+### 10.4 检查任务注册
+
+在 `himloco_lab` 根目录运行：
 
 ```bash
 python scripts/list_envs.py
 ```
 
-至少应看到：
+列表中至少应出现：
 
 ```text
 UIKA-Velocity
@@ -232,7 +462,7 @@ UIKA-Flat-Velocity
 UIKA-Flat-Velocity-Play
 ```
 
-## 0.10 最小训练验收
+### 10.5 运行最小训练
 
 ```bash
 python scripts/himloco_rsl_rl/train.py \
@@ -243,60 +473,127 @@ python scripts/himloco_rsl_rl/train.py \
   --run_name smoke
 ```
 
-反斜杠 `\` 表示这条命令还没有结束，下一行仍属于同一条命令。
+参数含义：
 
-验收重点不是 reward 高低，而是：
+- `--task`：选择训练任务；
+- `--num_envs 16`：并行模拟 16 只机器人；
+- `--max_iterations 1`：只更新一次，用于检查链路；
+- `--headless`：不打开图形窗口；
+- `--run_name smoke`：给这次检查命名。
+
+这一阶段不看机器人是否学会走路，只检查：
 
 - 环境成功创建；
-- 输出包含 `num_envs: 16`；
-- 输出显示单帧 observation、历史 observation 和 action 维度；
-- 完成一次 rollout 和 update；
-- `logs/himloco_rsl_rl/uika_flat/` 下出现带 `_smoke` 的目录；
-- 目录中存在 `params/env.yaml`、`params/agent.yaml` 和模型文件。
+- 输出显示 `num_envs: 16`；
+- 能完成 rollout 和一次参数更新；
+- `logs/himloco_rsl_rl/uika_flat/` 中生成 `_smoke` 日志目录；
+- 日志目录中存在 `params/env.yaml`、`params/agent.yaml` 和模型文件。
 
-## 0.11 环境问题分层
-
-| 现象 | 先检查 | 常见层级 |
-|---|---|---|
-| `nvidia-smi` 失败 | 驱动是否加载 | 驱动/硬件 |
-| `python` 版本不对 | `which python`、conda 是否激活 | Python 环境 |
-| `No module named isaacsim` | `pip show isaacsim` | Python 环境 |
-| `No module named isaaclab` | Isaac Lab 是否安装在同一环境 | Isaac Lab |
-| 找不到 `himloco_lab` | editable install、当前解释器 | 项目安装 |
-| task 不存在 | `scripts/list_envs.py`、任务注册 | 项目配置 |
-| CUDA OOM | 降低 `--num_envs`、关闭其他仿真进程 | 资源 |
-| observation 中出现 NaN | reset、关节限制、动作、物理参数 | 项目/仿真 |
-
-排错时一次只改变一件事，并保存完整错误的第一处 traceback。最后一行告诉你异常类型，最前面的项目文件位置通常告诉你问题从哪里进入。
+完成这一步后，RL 环境配置结束。
 
 ---
 
-# 第 1 课：第一次训练——从命令追到环境
+# 第二部分：认识 UIKA 强化学习工程
 
-## 1.1 本节问题
+## 11. 先认识项目结构
 
-当你运行：
-
-```bash
-python scripts/himloco_rsl_rl/train.py --task UIKA-Flat-Velocity
-```
-
-程序怎样知道要加载 UIKA、平地和 HimLoco PPO？
-
-## 1.2 先画出入口链
-
-按下面顺序打开文件，不要一开始就阅读每一行：
-
-1. `scripts/himloco_rsl_rl/train.py`
-2. `source/himloco_lab/himloco_lab/tasks/locomotion/robots/uika/__init__.py`
-3. `source/himloco_lab/himloco_lab/tasks/locomotion/robots/uika/flat_env_cfg.py`
-4. `source/himloco_lab/himloco_lab/tasks/locomotion/robots/uika/velocity_env_cfg.py`
-5. `source/himloco_lab/himloco_lab/tasks/locomotion/agents/himloco_rsl_rl_cfg.py`
-
-`gym.register()` 把字符串 ID 与环境配置、算法配置连接起来。对于 `UIKA-Flat-Velocity`：
+你暂时不需要读完所有代码，只需要知道不同问题应该去哪里找。
 
 ```text
-任务字符串
+himloco_lab/
+├── scripts/
+│   ├── list_envs.py
+│   └── himloco_rsl_rl/
+│       ├── train.py
+│       ├── play.py
+│       └── play_interactive.py
+├── source/himloco_lab/himloco_lab/
+│   ├── assets/uika.py
+│   ├── envs/
+│   ├── rsl_rl/
+│   └── tasks/locomotion/
+│       ├── agents/
+│       ├── mdp/
+│       └── robots/uika/
+└── logs/
+```
+
+常见入口：
+
+| 想解决的问题 | 先看哪里 |
+|---|---|
+| 怎样启动训练 | `scripts/himloco_rsl_rl/train.py` |
+| 怎样播放策略 | `scripts/himloco_rsl_rl/play.py` |
+| UIKA 模型和执行器 | `assets/uika.py` |
+| observation/action/reward 配置 | `robots/uika/velocity_env_cfg.py` |
+| reward 函数实现 | `mdp/rewards.py` |
+| PPO 和网络参数 | `agents/himloco_rsl_rl_cfg.py` |
+| HimLoco estimator | `rsl_rl/modules/him_estimator.py` |
+| PPO 更新逻辑 | `rsl_rl/algorithms/him_ppo.py` |
+
+## 12. 一步强化学习中发生了什么
+
+强化学习不是单独一个神经网络，而是一个不断重复的数据闭环：
+
+```text
+环境生成 observation
+        ↓
+策略根据 observation 输出 action
+        ↓
+Isaac Sim 执行 action 并推进物理世界
+        ↓
+环境计算 reward、下一步 observation 和 done
+        ↓
+PPO 使用收集到的数据更新策略
+        ↓
+进入下一轮
+```
+
+核心术语：
+
+| 术语 | 在本项目中的含义 |
+|---|---|
+| environment | UIKA、地形、传感器和任务规则组成的环境 |
+| observation | 策略当前能获得的信息 |
+| action | 策略输出的 12 维关节动作 |
+| command | 期望机器人执行的目标速度 |
+| reward | 对当前行为的数值反馈 |
+| done | 当前回合是否结束 |
+| policy/actor | 根据 observation 生成 action 的网络 |
+| critic | 估计当前状态长期价值的网络 |
+| rollout | 用当前策略连续采集的一批数据 |
+
+本项目中的主要数据流：
+
+```text
+Isaac Lab managers
+  → HimlocoManagerBasedRLEnv
+  → HimlocoVecEnvWrapper
+  → HIMOnPolicyRunner
+  → HIMPPO
+  → HIMActorCritic / HIMEstimator
+```
+
+## 13. task 和 Scene：训练的是哪一个环境
+
+训练命令中的：
+
+```bash
+--task UIKA-Flat-Velocity
+```
+
+不是随意字符串。它在：
+
+```text
+source/himloco_lab/himloco_lab/tasks/locomotion/robots/uika/__init__.py
+```
+
+中通过 `gym.register()` 注册。
+
+`UIKA-Flat-Velocity` 会连接：
+
+```text
+任务名称
   → FlatRobotEnvCfg
   → UIKAFlatPPORunnerCfg
   → gym.make(...)
@@ -304,99 +601,7 @@ python scripts/himloco_rsl_rl/train.py --task UIKA-Flat-Velocity
   → HIMOnPolicyRunner
 ```
 
-## 1.3 认识命令行覆盖
-
-配置中默认 `num_envs=4096`，但训练入口执行：
-
-```python
-env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
-```
-
-因此：
-
-```bash
---num_envs 64
-```
-
-会在运行时覆盖默认值。这类覆盖适合临时实验；需要成为长期任务定义的改动才应写入配置文件。
-
-## 1.4 实验：证明覆盖确实生效
-
-分别运行：
-
-```bash
-python scripts/himloco_rsl_rl/train.py --task UIKA-Flat-Velocity --num_envs 16 --max_iterations 1 --headless --run_name env16
-python scripts/himloco_rsl_rl/train.py --task UIKA-Flat-Velocity --num_envs 64 --max_iterations 1 --headless --run_name env64
-```
-
-记录两次输出中的：
-
-- `num_envs`；
-- 每次迭代采集的样本数；
-- FPS；
-- 显存占用；
-- 一次迭代耗时。
-
-这一实验只能说明吞吐和资源差异，不能用 1 次迭代判断哪个策略更好。
-
----
-
-# 第 2 课：RL 不是一个网络，而是一个数据闭环
-
-## 2.1 本节问题
-
-策略为什么能够“学”？答案不在某一个类里，而在循环中：
-
-```text
-observation → policy → action → simulator → reward/next observation
-       ↑                                      ↓
-       └──────────── PPO/HIO 更新参数 ─────────┘
-```
-
-在本项目中，关键数据流为：
-
-```text
-Isaac Lab managers
-  → HimlocoManagerBasedRLEnv
-  → HimlocoVecEnvWrapper（堆叠历史帧）
-  → HIMOnPolicyRunner（采集 rollout）
-  → HIMPPO（计算 return、advantage 和 loss）
-  → HIMActorCritic / HIMEstimator
-  → 产生下一批 action
-```
-
-## 2.2 把术语落到张量
-
-| 术语 | 本项目中的含义 | 常见形状 |
-|---|---|---|
-| observation | 策略当前可用的信息 | `[num_envs, obs_dim]` |
-| action | 每个环境中 12 个关节的策略输出 | `[num_envs, 12]` |
-| reward | 每个环境当前一步的标量反馈 | `[num_envs]` |
-| done | 哪些环境需要结束并重置 | `[num_envs]` |
-| rollout | 多个环境连续若干步的数据 | 环境数 × 步数 |
-| policy | 根据 observation 给出 action 分布 | 神经网络 |
-| critic | 估计当前状态价值 | 神经网络 |
-
-形状中的第一维是并行环境。Isaac Lab 同时模拟许多 UIKA，不是为了在画面里热闹，而是为了并行收集经验。
-
-## 2.3 代码追踪练习
-
-在以下位置找到相邻的四步：
-
-1. `HIMOnPolicyRunner.learn()` 调用 `self.alg.act(...)`；
-2. runner 调用 `self.env.step(actions)`；
-3. `HIMPPO.process_env_step()` 把 transition 放入 storage；
-4. rollout 结束后执行 `compute_returns()` 和 `update()`。
-
-提交一张你自己画的数据流图。每条箭头都要写数据名，不能只画类名。
-
----
-
-# 第 3 课：Scene、task 与 manager 配置
-
-## 3.1 一个环境由什么组成
-
-`RobotEnvCfg` 把多个 manager 配置组合在一起：
+`RobotEnvCfg` 由多个 Isaac Lab manager 配置组成：
 
 ```python
 scene
@@ -409,168 +614,113 @@ events
 curriculum
 ```
 
-这正是后续课程的工程地图。找不到一个行为的配置时，先判断它属于哪类 manager。
+`scene` 中包含地形、UIKA 机器人、高度扫描器、接触传感器和灯光。平地任务通过继承基础 scene，把复杂地形替换为无限平面。
 
-## 3.2 Scene 中有哪些东西
+### 动手检查
 
-`RobotSceneCfg` 至少包含：
-
-- terrain：地面或生成地形；
-- robot：UIKA articulation；
-- height scanner：地形高度射线；
-- contact sensor：接触力、触地和腾空时间；
-- light：可视化光源。
-
-`FlatRobotSceneCfg` 继承它，但把 terrain 改成无限平面。这说明继承不是“复制代码”，而是保留共同配置并替换差异。
-
-## 3.3 实验：平地与复杂地形不是同一个变量
-
-先比较两个任务：
+分别运行一次最小训练：
 
 ```bash
 python scripts/himloco_rsl_rl/train.py --task UIKA-Flat-Velocity --num_envs 16 --max_iterations 1 --headless --run_name flat_smoke
 python scripts/himloco_rsl_rl/train.py --task UIKA-Velocity --num_envs 16 --max_iterations 1 --headless --run_name rough_smoke
 ```
 
-比较保存的 `params/env.yaml`，回答：
+比较两个日志目录中的 `params/env.yaml`，观察 terrain 和 curriculum 的区别。
 
-- terrain type 有什么不同？
-- curriculum 是否生效？
-- critic 的 height scanner 是否仍然存在？
-- 两个任务是否使用同一套 action、observation 和 reward？
+## 14. Observation：策略看到了什么
 
-这一步练习“读取最终配置”，不要仅凭类名猜测。
+HimLoco 的策略主要使用机器人本体感知信息。当前 UIKA policy 的单帧 observation 为：
 
----
-
-# 第 4 课：Observation——策略究竟看到了什么
-
-## 4.1 论文问题
-
-HimLoco 论文强调：真实机器人难以直接获得准确地形摩擦、恢复系数和高度图，因此 policy 主要依赖关节编码器和 IMU 的本体感知；训练阶段的 value network 可以使用额外 privileged information。
-
-本仓库用两个 observation group 表达这一点：
-
-- `PolicyCfg`：给 actor；
-- `CriticCfg`：继承 policy 内容，再加入额外信息给 critic。
-
-## 4.2 policy 单帧 observation
-
-| term | 含义 | 维度 |
+| observation term | 含义 | 维度 |
 |---|---|---:|
 | `velocity_commands` | 目标 x/y 线速度与 z 角速度 | 3 |
 | `base_ang_vel` | 机体角速度 | 3 |
 | `projected_gravity` | 机体坐标系中的重力方向 | 3 |
 | `joint_pos_rel` | 12 个关节相对默认角度 | 12 |
 | `joint_vel_rel` | 12 个关节速度 | 12 |
-| `last_action` | 上一步 12 维动作 | 12 |
+| `last_action` | 上一步动作 | 12 |
 | 合计 |  | 45 |
 
-`base_lin_vel` 没有放入 policy，而是出现在 critic group 中。不要把“仿真中能读取”误认为“部署时 policy 应该直接使用”。
+配置位于 `ObservationsCfg.PolicyCfg`。
 
-## 4.3 scale、noise、clip 的顺序意识
+critic 使用 `ObservationsCfg.CriticCfg`。它继承 policy observation，并加入仿真中可获得的线速度、外力和地形高度等 privileged information。
 
-一个 observation term 不只有函数：
+这叫 asymmetric actor-critic：
+
+- actor 只使用部署时能够获得的信息；
+- critic 在训练时使用更多信息，帮助估计 value；
+- 真正部署时只运行 actor 和 estimator。
+
+### scale、noise 和 clip
+
+一个 observation term 可能包含：
 
 ```python
-base_ang_vel = ObsTerm(
-    func=mdp.base_ang_vel,
-    scale=0.25,
-    clip=(-100, 100),
-    noise=Unoise(n_min=-0.2, n_max=0.2),
-)
+func
+scale
+noise
+clip
 ```
 
-读配置时分别问：
+阅读时依次问：
 
-- 原始物理量是什么？
-- 为什么缩放？
-- 噪声模拟哪类传感误差？
-- clip 是正常范围设计，还是极端值保护？
+1. `func` 返回哪个物理量；
+2. `scale` 为什么缩放；
+3. `noise` 模拟什么传感误差；
+4. `clip` 如何限制极端值。
 
-## 4.4 历史长度的工程陷阱
+### 历史 observation
 
-runner 中写着：
+当前 runner 配置：
 
 ```python
 history_length = 5
 ```
 
-但 wrapper 的定义是“当前帧 + `history_length` 个过去帧”，所以：
+但 wrapper 将它解释为“当前帧 + 5 个过去帧”，因此实际共有 6 帧：
 
 ```text
-单帧维度 = 45
-实际帧数 = 5 + 1 = 6
-actor 历史输入维度 = 45 × 6 = 270
+单帧维度：45
+历史帧数：6
+历史输入维度：45 × 6 = 270
 ```
 
-论文写默认 `H=5`，本仓库实际传给 estimator 的帧数是 6。这里不要争论变量名“应该是什么意思”，而要沿构造函数和张量 shape 证明实际行为。
+这个例子说明：不要只根据变量名推断行为，要沿代码检查张量 shape。
 
-## 4.5 实验：屏蔽一项观测前先做预测
+## 15. Action：12 个输出怎样控制关节
 
-选择一个风险较低的观测，例如在教学分支中把 `last_action` 临时替换为同维零向量。实验前写下：
+UIKA 有 12 个主动关节，每条腿包含 hip、thigh 和 calf 三个关节。
 
-- 你预测动作平滑性、训练速度或最终行为会怎样？
-- 哪些 TensorBoard 指标可能变化？
-- 哪些现象不能由短训练判断？
-
-保持 task、seed、`num_envs`、迭代数和 reward 不变，运行 baseline 与 ablation。不要同时改变 observation noise。
-
----
-
-# 第 5 课：Action——12 个数怎样控制机器人
-
-## 5.1 action 不是力矩
-
-本任务使用 `JointPositionActionCfg`。策略输出经过 scale，再加到默认关节角上，成为 PD 控制器的目标位置。概念链如下：
+策略 action 的数据流：
 
 ```text
-policy output
+12 维神经网络输出
   → action scale
-  → default joint position offset
-  → target joint position
-  → PD actuator
-  → joint torque（受电机能力限制）
+  → 加到默认关节角
+  → 得到目标关节位置
+  → PD 控制器计算力矩
+  → 电机模型限制最终输出
 ```
 
-论文将动作描述为“目标关节位置相对 nominal position 的偏置”，本仓库与这一思想对应。
+因此当前 action 表示目标关节位置偏置，不是直接输出力矩。
 
-## 5.2 为什么髋关节和其他关节 scale 不同
-
-当前配置中：
+`ActionsCfg` 中的缩放为：
 
 ```python
 scale={".*_hip_joint": 0.125, "^(?!.*_hip_joint).*": 0.25}
 ```
 
-髋关节的动作幅度更小。动作缩放越大，策略可探索的目标角范围越大，但动作冲击、越界和仿真不稳定风险也可能增加。
+髋关节动作范围比其他关节更小。调整 action scale 时还必须一起检查：
 
-## 5.3 三个必须一起核对的文件
+- `assets/uika.py` 中的默认关节角；
+- URDF 中的关节方向和限制；
+- 执行器的 stiffness、damping、effort 和 velocity limit。
 
-- `ActionsCfg`：策略输出如何缩放；
-- `assets/uika.py`：默认姿态、关节顺序、执行器与限制；
-- UIKA URDF：关节轴、上下限和几何结构。
+动作范围过小可能限制步幅，过大可能造成冲击、越界或仿真不稳定。
 
-只改 action scale 而不看关节限制，属于无依据调参。
+## 16. Command：告诉机器人做什么
 
-## 5.4 实验：动作缩放与行为
-
-在独立实验分支中，把非 hip scale 从 `0.25` 改为一个更保守的值。保持其他设置不变，比较：
-
-- `action_rate_l2`；
-- 关节限位惩罚；
-- 速度跟踪；
-- 回放时的步幅、抖动和通过能力。
-
-如果短训练策略走不起来，只能说明“在当前预算下学习更慢或失败”，不能直接证明较小动作范围永远更差。
-
----
-
-# 第 6 课：Command——告诉机器人做什么
-
-## 6.1 command 与 observation 的关系
-
-`CommandsCfg` 负责采样目标：
+command 定义任务目标。当前速度任务会采样：
 
 ```python
 lin_vel_x=(-1.0, 1.0)
@@ -578,28 +728,25 @@ lin_vel_y=(-1.0, 1.0)
 ang_vel_z=(-1.0, 1.0)
 ```
 
-采样结果通过 `velocity_commands` observation 告诉策略，又被速度跟踪 reward 用作目标。command 不直接控制关节，它定义任务。
+三个量分别表示：
 
-## 6.2 训练范围与播放命令不是一回事
+- 前后方向线速度；
+- 左右方向线速度；
+- 绕竖直轴旋转的角速度。
 
-训练环境随机采样较宽范围，使策略学习多种目标；play 配置可固定一个速度，便于观察。不要为了让回放只向前走，就把整个训练范围改成单一前进速度。
+command 通过 `velocity_commands` observation 告诉策略，同时被速度跟踪 reward 当作目标。
 
-## 6.3 实验：从简单指令开始
+```text
+command 采样
+  ├── 进入 observation，告诉策略目标
+  └── 进入 reward，计算实际速度与目标的差距
+```
 
-设计两组训练：
+训练配置通常采样较宽的 command 范围；play 配置可以固定速度，便于观察某个动作。不要为了让回放只向前走，就把训练范围改成单一速度。
 
-- baseline：当前 x/y/yaw 范围；
-- simplified：缩小横移和旋转范围，保留前进后退。
+## 17. Reward：为什么机器人会形成某种行为
 
-比较早期线速度跟踪和最终泛化。你需要回答：simplified 更快学会前进，是否意味着它是更好的通用策略？
-
----
-
-# 第 7 课：Reward——把“想要的行为”写成可计算反馈
-
-## 7.1 reward 的三个层次
-
-读取一个 reward term 时分开看：
+一个 reward term 包含三部分：
 
 ```python
 track_lin_vel_xy = RewTerm(
@@ -609,339 +756,389 @@ track_lin_vel_xy = RewTerm(
 )
 ```
 
-1. `func`：原始物理量如何计算；
-2. `params`：目标、阈值、body 或 sensor 是什么；
-3. `weight`：这个目标在总 reward 中占多大方向和强度。
+- `func`：如何计算原始数值；
+- `params`：目标、阈值、传感器或 body；
+- `weight`：这一项对总 reward 的影响。
 
-正权重通常鼓励，负权重通常惩罚，但必须先看函数返回值。不能只看到负号就下结论。
+当前 reward 可以分为：
 
-## 7.2 当前 reward 的行为分组
-
-- 任务目标：线速度与角速度跟踪；
-- 机体稳定：竖直速度、横滚俯仰角速度、高度、朝上；
-- 关节约束：力矩、功率、加速度、位置限制、默认姿态；
-- 动作平滑：相邻动作变化；
-- 接触安全：非足端接触、过大足端力、打滑；
-- 步态塑形：腾空时间、触地、足端高度、对角步态。
-
-reward 是多目标折中。某个分项变好，可能以另一个目标变差为代价。
-
-## 7.3 推荐的第一个 reward 实验
-
-选择行为和指标都容易观察的 `action_rate_l2`：
-
-1. baseline 使用当前权重；
-2. treatment 只改变该权重；
-3. 两组使用相同 seed、task、环境数、迭代数；
-4. 比较动作变化率、速度跟踪、总 reward 和回放抖动；
-5. 解释“更平滑”是否牺牲了响应速度。
-
-不要把复杂足端高度项作为第一个练习。高度项可能涉及世界坐标/机体坐标、接触相位和速度权重，初学者很容易根据单一 episode reward 做错误反推。
-
-## 7.4 一份合格的 reward 实验结论
-
-不合格：
-
-> treatment 的总 reward 更高，所以更好。
-
-合格：
-
-> 在相同 seed 和训练预算下，treatment 的动作变化率惩罚绝对值下降，回放抖动减小；但线速度跟踪误差增大。因此该权重改善了平滑性，却降低了响应能力。当前结果只覆盖平地和一个 seed，不能推广到复杂地形。
-
----
-
-# 第 8 课：Termination、Event 与 Curriculum
-
-## 8.1 三者分别解决什么
-
-- termination：这一回合何时结束；
-- event：何时随机化或施加扰动；
-- curriculum：何时提高或降低任务难度。
-
-它们都会改变采样分布，但含义不同。
-
-## 8.2 EventCfg 的时间模式
-
-本仓库包含：
-
-- `startup`：环境启动时随机化摩擦、质量和质心；
-- `reset`：每次回合重置关节、base、执行器参数；
-- `interval`：训练中周期性施加力或推机器人。
-
-阅读 event 时，先看 `mode`，再看采样范围，最后看作用对象 `asset_cfg`。
-
-## 8.3 为什么要 domain randomization
-
-真实机器人与仿真模型不会完全一致。HimLoco 论文将质量、摩擦、执行器、延迟和外力等随机化，用不同环境响应训练鲁棒策略。本仓库把这些因素放在 `EventCfg` 和执行器配置中。
-
-随机范围不是越大越好。范围过小可能覆盖不了现实差异，范围过大可能让任务难以学习或产生不真实样本。
-
-## 8.4 实验：随机化不是噪声开关
-
-选择一项容易解释的随机化，例如 base mass：
-
-- baseline：当前范围；
-- narrow：缩小范围；
-- evaluation：在训练范围内和范围外分别回放。
-
-比较学习速度和鲁棒性。结论应区分“训练更快”与“面对模型误差更稳定”。
-
----
-
-# 第 9 课：从 HimLoco 论文回到本仓库
-
-## 9.1 论文的核心工程问题
-
-腿式机器人部署时只能获得有限且有噪声的传感信息。HimLoco 不要求 policy 直接回归所有外部环境参数，而是从历史本体感知中提取机器人响应：
-
-- 显式部分：3 维机体线速度估计；
-- 隐式部分：16 维归一化 latent，用于表达稳定性和环境动态响应。
-
-policy 使用“当前单帧 observation + 速度估计 + latent”输出动作。
-
-## 9.2 论文—代码映射
-
-| 论文内容 | 本仓库代码 |
+| 目标 | 代表项 |
 |---|---|
-| partial observation | `ObservationsCfg.PolicyCfg` |
-| privileged value input | `ObservationsCfg.CriticCfg` |
-| history observation | `HimlocoVecEnvWrapper.obs_history_buf` |
-| hybrid internal embedding | `HIMEstimator.encoder` |
-| explicit velocity loss | `F.mse_loss(pred_vel, vel)` |
-| prototype contrastive objective | `proto`、`sinkhorn()`、`swap_loss` |
-| actor input | `torch.cat((current_obs, vel, latent))` |
-| HIO + PPO | `HIMPPO.update()` |
+| 跟踪任务 | 线速度、角速度跟踪 |
+| 保持机体稳定 | 竖直速度、姿态、机体高度 |
+| 保护关节和电机 | 力矩、功率、加速度、关节限制 |
+| 动作平滑 | `action_rate_l2` |
+| 接触安全 | 非足端接触、足端冲击、打滑 |
+| 塑造步态 | 腾空时间、足端高度、对角步态 |
 
-## 9.3 estimator 数据形状
+reward 是多个目标的折中。某一项改善，可能以另一项变差为代价。
 
-当前实现中：
+### 推荐的第一个 reward 实验
+
+从 `action_rate_l2` 开始：
+
+1. 先保留原权重训练 baseline；
+2. 只修改 `action_rate_l2` 权重；
+3. 两次实验使用相同 task、seed、环境数和迭代数；
+4. 比较动作变化率、速度跟踪和回放抖动；
+5. 检查平滑性是否换来了更慢的速度响应。
+
+一次只改变一个主要变量，才能说明结果可能由什么造成。
+
+## 18. Termination、Event 和 Curriculum
+
+三者都会改变采集到的数据，但作用不同：
+
+| 模块 | 作用 |
+|---|---|
+| termination | 判断一个 episode 何时结束 |
+| event | 在启动、reset 或固定间隔执行随机化/扰动 |
+| curriculum | 根据表现逐步改变任务难度 |
+
+### Event 的时间模式
+
+本项目包含：
+
+- `startup`：启动时随机化摩擦、质量和质心；
+- `reset`：每回合重置关节、base 和执行器参数；
+- `interval`：训练中周期性施加外力或推机器人。
+
+这些随机化用于让策略适应模型误差和环境变化。随机范围不是越大越好：范围太小可能缺乏鲁棒性，范围太大可能让训练任务难以学习或产生不真实状态。
+
+curriculum 则让机器人从较简单地形开始，表现达到条件后再进入更困难的地形。
+
+## 19. HimLoco：为什么要使用历史信息
+
+本项目参考 ICLR 2024 论文：
+
+- [Hybrid Internal Model: Learning Agile Legged Locomotion with Simulated Robot Response](https://arxiv.org/abs/2312.11460)
+- [HimLoco 项目主页](https://junfeng-long.github.io/HIMLoco/)
+- [HimLoco 官方代码](https://github.com/InternRobotics/HIMLoco)
+
+真实机器人难以直接获得准确的地形高度、摩擦等外部状态。HimLoco 从连续多帧本体感知中提取机器人对环境的响应：
+
+- 3 维显式速度估计；
+- 16 维隐式 latent representation。
+
+当前网络数据流：
 
 ```text
-历史 observation：6 × 45 = 270
-encoder 输出：3 维 velocity + 16 维 latent
-actor 输入：45 + 3 + 16 = 64
-actor 输出：12 维 action mean
+6 帧历史 observation（270 维）
+        ↓
+HIMEstimator
+  ├── 3 维 velocity
+  └── 16 维 latent
+        ↓
+当前 observation（45）+ velocity（3）+ latent（16）
+        ↓
+Actor MLP（64 维输入）
+        ↓
+12 维 action
 ```
 
-训练时 estimator 使用下一时刻 critic observation 中的真实 base linear velocity 作为监督目标，同时用 source/target encoder、prototype 和 Sinkhorn assignment 计算 swap loss。
+论文中的概念与本仓库代码对应：
 
-## 9.4 HIO 与 PPO 如何交替
+| 论文概念 | 本仓库代码 |
+|---|---|
+| partial observation | `ObservationsCfg.PolicyCfg` |
+| privileged information | `ObservationsCfg.CriticCfg` |
+| historical observation | `HimlocoVecEnvWrapper` |
+| explicit velocity + implicit latent | `HIMEstimator` |
+| velocity loss | `F.mse_loss(pred_vel, vel)` |
+| prototype contrastive objective | `proto`、`sinkhorn()`、`swap_loss` |
+| actor input | `HIMActorCritic.update_distribution()` |
+| HIO + PPO | `HIMPPO.update()` |
 
-在每个 mini-batch 中：
+论文和本仓库不是逐行一致的实现。例如论文默认历史长度 `H=5`，当前 wrapper 的 `history_length=5` 实际表示 6 帧；论文训练使用 100 步 rollout，当前 UIKA 配置使用每环境 24 步。工程判断应以本仓库实际代码和日志为准。
 
-1. 根据 observation 计算动作分布与 value；
-2. 调用 `estimator.update(...)` 更新 HIM；
-3. 计算 PPO clipped surrogate loss；
-4. 计算 value loss 与 entropy bonus；
-5. 更新 actor/critic。
+## 20. PPO 训练循环
 
-这与论文的“HIO 与 PPO 交替优化”思想对应，但具体 rollout 长度和实现细节以本仓库为准。论文报告 4096 个环境、100 步 rollout；UIKA 当前配置是 4096 个环境、每环境 24 步。不要把论文超参数直接复制成课程默认值。
+UIKA 使用 on-policy PPO。每次训练迭代大致分为：
 
-## 9.5 TensorBoard：先问问题，再选曲线
+1. 多个环境并行运行 `num_steps_per_env` 步；
+2. 保存 observation、action、reward、done、value 和 log probability；
+3. 根据最后一个 value 计算 return 和 advantage；
+4. 将 rollout 切成多个 mini-batch；
+5. 更新 HIM estimator；
+6. 计算 PPO clipped surrogate loss；
+7. 计算 value loss 和 entropy bonus；
+8. 更新 actor 和 critic；
+9. 写入日志并定期保存 checkpoint。
 
-启动：
+主要参数位于：
+
+```text
+source/himloco_lab/himloco_lab/tasks/locomotion/agents/himloco_rsl_rl_cfg.py
+```
+
+UIKA 当前关键参数包括：
+
+```text
+num_steps_per_env = 24
+history_length = 5
+clip_param = 0.2
+gamma = 0.99
+lam = 0.95
+learning_rate = 5e-4
+```
+
+第一次学习这些参数时，先理解它们控制哪一部分，不要同时调多个超参数。
+
+---
+
+# 第三部分：训练、观察与实验
+
+## 21. 根据显卡调整并行环境数
+
+项目默认可能使用 4096 个并行环境，但不同显卡的可用显存不同。不要一开始直接使用最大配置。
+
+建议逐级测试：
+
+| 用途 | 建议起点 |
+|---|---:|
+| 安装冒烟测试 | 16 |
+| 代码调试 | 64 |
+| 短实验 | 256 或 512 |
+| 正式训练 | 逐步尝试 1024、2048、4096 |
+
+通过命令行覆盖：
+
+```bash
+python scripts/himloco_rsl_rl/train.py \
+  --task UIKA-Flat-Velocity \
+  --num_envs 256 \
+  --max_iterations 100 \
+  --headless \
+  --run_name first_train
+```
+
+如果出现 CUDA OOM，先关闭其他 Isaac Sim 进程，再降低 `--num_envs`。
+
+环境数减少后，每轮收集的样本也会减少。因此 16 或 64 环境适合检查程序，不适合直接与 4096 环境的完整训练结果比较。
+
+## 22. 使用 TensorBoard 看训练
+
+在项目根目录启动：
 
 ```bash
 tensorboard --logdir logs/himloco_rsl_rl --port 6006
 ```
 
-浏览器访问：
+浏览器打开：
 
 ```text
 http://localhost:6006
 ```
 
-常见指标分四类看：
+可以从四类指标开始：
 
-- 任务表现：速度跟踪、episode reward、episode length；
-- 策略优化：surrogate、value function、KL、learning rate；
-- HIM：estimation loss、swap loss；
-- 工程性能：FPS、collection time、learning time。
+| 类别 | 关注内容 |
+|---|---|
+| 任务表现 | episode reward、速度跟踪、episode length |
+| PPO | surrogate loss、value loss、KL、learning rate |
+| HimLoco | estimation loss、swap loss |
+| 性能 | FPS、collection time、learning time |
 
-不要要求所有 loss 单调下降。RL 的数据分布随策略变化，reward 也是多个目标的加权结果。异常判断应结合突变、长期趋势、NaN、策略回放和配置变化。
+不要要求所有 loss 单调下降。强化学习的数据分布会随策略变化。判断训练是否正常，需要结合长期趋势、是否出现 NaN、最终 checkpoint 回放以及各 reward term 的变化。
 
----
+## 23. 播放训练好的策略
 
-# 第 10 课：综合项目——有证据地改变一个行为
-
-## 10.1 项目题目模板
-
-从一个可观察问题开始，例如：
-
-- 机器人平地行走时动作抖动明显；
-- 机器人低速指令跟踪较差；
-- 静止指令下仍频繁抬脚；
-- 足端打滑较多；
-- 复杂地形训练早期频繁失败。
-
-不要用“把 reward 调好”作为题目，它没有可检验终点。
-
-## 10.2 实验协议
-
-### 第一步：定义指标
-
-至少选择：
-
-- 一个主要任务指标；
-- 一个可能产生副作用的指标；
-- 一个可回放观察的行为标准。
-
-### 第二步：建立 baseline
-
-记录：
+训练日志默认保存在：
 
 ```text
-git commit / git diff
-task
-seed
-num_envs
-max_iterations
-run_name
-GPU
-训练开始与结束时间
+logs/himloco_rsl_rl/实验名/运行目录/
 ```
 
-### 第三步：提出机制假设
-
-示例：
-
-> 我认为机器人抖动主要来自相邻 action 变化过大。提高 action-rate penalty 的绝对权重会降低抖动，但可能使速度响应变慢。
-
-### 第四步：单变量修改
-
-只修改能检验该假设的主要因素。格式化、注释等不影响运行的改动可以存在，但不能同时改变 command 范围、observation 和多个 reward。
-
-### 第五步：运行 treatment
-
-使用与 baseline 一致的训练预算和 seed。用明确名称：
+播放最近的 flat 策略：
 
 ```bash
---run_name action_rate_stronger_seed1
+python scripts/himloco_rsl_rl/play.py \
+  --task UIKA-Flat-Velocity-Play \
+  --num_envs 4
 ```
 
-### 第六步：比较与复查
+指定某次 run：
 
-先确认两个 run 的 `params/env.yaml` 和 `params/agent.yaml`，证明预期改动真正生效，再看曲线和回放。
+```bash
+python scripts/himloco_rsl_rl/play.py \
+  --task UIKA-Flat-Velocity-Play \
+  --load_run 2026-01-01_12-00-00_first_train \
+  --num_envs 4
+```
 
-### 第七步：写结论
+将示例中的 run 目录替换为自己的实际名称。没有指定 checkpoint 时，脚本会从该 run 中选择匹配的最新模型。
 
-按以下结构：
+回放时同时观察：
 
-1. 观察到了什么；
-2. 哪些证据支持；
-3. 是否支持原假设；
-4. 有什么副作用；
-5. 结论适用于哪些 task、seed 和训练预算；
-6. 下一轮只准备改变什么。
+- 是否跟随目标速度；
+- 机体是否稳定；
+- 步态是否平滑；
+- 足端是否打滑；
+- 是否出现关节极限或异常接触；
+- 改动改善了什么，又损失了什么。
 
-## 10.3 实验报告模板
+## 24. 做一个可靠的对照实验
+
+一个清楚的实验从具体问题开始，例如：
+
+- 机器人平地行走时动作抖动明显；
+- 低速指令跟踪较差；
+- 静止指令下仍频繁抬脚；
+- 足端打滑较多。
+
+不要使用“把 reward 调好”作为问题，因为它没有可验证的终点。
+
+推荐流程：
+
+1. 用一句话定义问题；
+2. 选择一个主要指标和一个副作用指标；
+3. 记录 baseline 的 task、seed、环境数和训练预算；
+4. 写下修改前的预测；
+5. 一次只改变一个主要因素；
+6. 使用相同条件训练 treatment；
+7. 检查两个 run 保存的 `env.yaml` 和 `agent.yaml`；
+8. 同时比较 TensorBoard 和回放行为；
+9. 写明结论只适用于哪些 task、seed 和训练预算。
+
+推荐记录格式：
 
 ```markdown
 # 实验标题
 
 ## 问题
 
-## 机制假设与预测
+## 假设与预测
 
-## 基线配置
+## Baseline
 
 ## 唯一主要改动
 
-## 运行命令与环境
+## 运行命令
 
-## 结果
+## TensorBoard 结果
 
-### TensorBoard 证据
+## 回放行为
 
-### 回放行为
+## 结论与副作用
 
-## 结论
-
-## 局限
-
-## 下一步
+## 局限和下一步
 ```
 
-## 10.4 评分标准
+---
 
-| 项目 | 合格标准 |
+# 第四部分：常见问题
+
+## 25. 为什么 `python` 找不到包
+
+先执行：
+
+```bash
+conda activate isaac_lab_51
+which python
+python -m pip --version
+```
+
+Python 和 pip 必须来自同一个 `isaac_lab_51` 环境。
+
+如果找不到 `himloco_lab`，在项目根目录重新执行：
+
+```bash
+python -m pip install -e source/himloco_lab
+```
+
+## 26. 为什么找不到 task
+
+运行：
+
+```bash
+python scripts/list_envs.py
+```
+
+如果 UIKA task 不在列表中，检查：
+
+- 是否位于正确仓库；
+- 项目是否安装到当前 conda 环境；
+- `himloco_lab.tasks` 是否能导入；
+- task 注册文件是否包含对应 ID。
+
+## 27. CUDA Out of Memory
+
+处理顺序：
+
+1. 关闭其他 Isaac Sim 和训练进程；
+2. 把 `--num_envs` 降到一半；
+3. 调试时使用 `--headless`；
+4. 确认没有启用不需要的相机或渲染；
+5. 再次运行。
+
+Isaac Lab 官方训练指南也建议在 OOM 时优先减少并行环境数：
+
+- [Isaac Lab 调试与训练指南](https://isaac-sim.github.io/IsaacLab/v2.3.0/source/overview/reinforcement-learning/training_guide.html)
+
+## 28. 出现 NaN
+
+NaN 常见来源：
+
+- observation 中出现非法数值；
+- action 过大导致仿真不稳定；
+- 机器人 reset 到无效姿态；
+- 关节限制、PD 参数或物理参数不合理；
+- reward 计算包含除零或无效输入；
+- 学习率或梯度异常。
+
+先找到 traceback 中第一个属于本项目的文件位置，再检查该位置附近的张量。不要只看最后一行异常，也不要同时修改多个参数碰运气。
+
+## 29. 为什么总 reward 上升但机器人行为不好
+
+总 reward 是多个 term 的加权和。它上升可能表示策略找到了某种容易获得分数、但不符合最终目标的行为。
+
+检查：
+
+- 每个 reward term 的变化；
+- 速度跟踪是否真的改善；
+- episode 是否因为异常终止变短；
+- 是否牺牲动作平滑性或能耗；
+- 回放行为是否满足原始工程目标。
+
+“程序能跑”“reward 上升”“机器人达到目标”是三个不同结论。
+
+---
+
+# 术语速查
+
+| 术语 | 简明解释 |
 |---|---|
-| 可复现 | 同学能根据记录找到配置并重复命令 |
-| 变量控制 | baseline 与 treatment 的主要差异唯一且明确 |
-| 证据 | 同时使用配置、曲线和行为，不只看总 reward |
-| 解释 | 能沿代码说明改动如何进入 RL 闭环 |
-| 边界意识 | 不把短训练、单 seed、单地形结论过度推广 |
+| conda environment | 相互隔离的 Python 和软件包环境 |
+| pip | Python 包安装工具 |
+| package | 可安装和复用的软件模块 |
+| simulator | 计算机器人与物理世界变化的软件 |
+| environment | 强化学习中的机器人、世界和任务规则 |
+| observation | 策略做决定时获得的信息 |
+| action | 策略交给环境的控制输出 |
+| command | 当前要求机器人完成的目标 |
+| reward | 对当前行为的数值反馈 |
+| episode | 从 reset 到下一次结束的一段交互 |
+| rollout | 用当前策略收集的一批连续数据 |
+| actor/policy | 根据 observation 产生 action 的网络 |
+| critic/value network | 估计状态长期价值的网络 |
+| privileged information | 训练可用、部署时不直接给 actor 的信息 |
+| domain randomization | 随机改变仿真参数以增强鲁棒性 |
+| curriculum | 根据表现逐步改变任务难度 |
+| checkpoint | 训练过程中保存的模型文件 |
+| baseline | 用于比较的原始设置 |
+| ablation | 移除或屏蔽一个因素以检验其作用 |
 
----
+# 官方资料索引
 
-# 附录 A：GPU 不统一时怎样选择 `num_envs`
-
-从小到大试，不按显卡型号猜：
-
-1. 先用 16 个环境完成冒烟测试；
-2. 用 64 个环境进行 GUI 或代码调试；
-3. 依次尝试 256、512、1024；
-4. 记录显存、FPS 与迭代时间；
-5. 只有资源足够时才使用默认 4096。
-
-出现 OOM 后先结束残留 Isaac Sim 进程并降低环境数。环境数过少时，一轮 PPO 收集到的样本也更少，因此小环境数实验适合检查代码和方向，不一定适合得出最终性能结论。
-
-`--headless` 关闭画面渲染，适合正式训练；需要看行为时使用 play，避免一边渲染大量环境一边训练。
-
----
-
-# 附录 B：实验纪律清单
-
-开始前：
-
-- [ ] 我能用一句话描述本次问题；
-- [ ] 我写下了改变后会发生什么；
-- [ ] baseline 能正常复现；
-- [ ] 当前 Git 状态已经记录；
-- [ ] 我只计划改变一个主要因素。
-
-运行后：
-
-- [ ] 我保存了完整命令；
-- [ ] 我检查了实际生成的 YAML；
-- [ ] 我没有只看总 reward；
-- [ ] 我看过 checkpoint 回放；
-- [ ] 我区分了观察、推断和结论；
-- [ ] 我写明了 seed、task、训练预算和局限。
-
----
-
-# 附录 C：术语表
-
-| 英文 | 本教程固定译法 | 简明含义 |
-|---|---|---|
-| environment | 环境 | 机器人与仿真世界组成的交互对象 |
-| observation | 观测 | 策略做决定时获得的信息 |
-| action | 动作 | 策略输出并交给控制器的量 |
-| command | 指令 | 当前任务要求，如目标速度 |
-| reward | 奖励 | 对当前行为的标量反馈 |
-| termination | 终止 | 当前 episode 结束的条件 |
-| episode | 回合 | 从一次 reset 到下一次结束 |
-| rollout | 轨迹采集 | 用当前策略连续收集的一批交互数据 |
-| actor / policy | 策略网络 | 根据观测产生动作分布 |
-| critic / value network | 价值网络 | 估计当前状态的长期价值 |
-| privileged information | 特权信息 | 训练时可用、部署时不直接给策略的信息 |
-| proprioception | 本体感知 | IMU、关节位置、关节速度等自身传感信息 |
-| domain randomization | 域随机化 | 随机改变仿真参数以提高鲁棒性 |
-| curriculum | 课程学习 | 根据表现逐步改变任务难度 |
-| checkpoint | 检查点 | 某次训练保存的模型与优化状态 |
-| ablation | 消融实验 | 移除或屏蔽一个因素以检验其作用 |
-| baseline | 基线组 | 用于比较的原始设置 |
-
----
-
-# 参考资料
-
-- Junfeng Long et al., [Hybrid Internal Model: Learning Agile Legged Locomotion with Simulated Robot Response](https://arxiv.org/abs/2312.11460), ICLR 2024.
-- [HimLoco 项目主页](https://junfeng-long.github.io/HIMLoco/)
+- [Miniconda 官方页面](https://docs.conda.io/miniconda.html)
+- [conda Linux 安装](https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html)
+- [Python Packaging User Guide](https://packaging.python.org/en/latest/tutorials/installing-packages/)
+- [pip 官方文档](https://pip.pypa.io/en/stable/)
+- [Isaac Sim 5.1 Python 安装](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/install_python.html)
+- [Isaac Lab v2.3.0 pip 安装](https://isaac-sim.github.io/IsaacLab/v2.3.0/source/setup/installation/pip_installation.html)
+- [Isaac Lab v2.3.0 文档](https://isaac-sim.github.io/IsaacLab/v2.3.0/)
+- [Pro Git](https://git-scm.com/book/en/v2)
+- [HimLoco 论文](https://arxiv.org/abs/2312.11460)
 - [HimLoco 官方代码](https://github.com/InternRobotics/HIMLoco)
-- [Isaac Sim 5.1 Python 环境安装](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/install_python.html)
-- [Isaac Sim 5.1 系统要求](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/requirements.html)
-- [Isaac Lab RL 调试与训练指南](https://isaac-sim.github.io/IsaacLab/main/source/overview/reinforcement-learning/training_guide.html)
 
-阅读外部资料时先确认版本。网页的 `latest` 文档可能已经面向 Isaac Sim 6.x，不一定适用于本课程冻结的 5.1 工程线。
+版本页面中的 5.1 和 v2.3.0 是本教程的一部分。即使官方已经发布更新版本，也不要在没有完成兼容性验证时单独升级某个组件。

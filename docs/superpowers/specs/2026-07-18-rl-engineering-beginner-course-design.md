@@ -8,8 +8,8 @@
 
 - 单文件、自包含，读者无需先阅读 README 或课程设计；
 - 不出现教师发布流程、工作区状态、评分标准、提交要求或设计讨论；
-- 正文假设 Ubuntu 已经安装，只提供 Ubuntu 官方安装入口，不教授启动盘、分区或双系统安装；
-- 在 RL 内容之前按依赖顺序讲清 Ubuntu 检查、终端与路径、NVIDIA 驱动、Python、pip、conda、Isaac Sim、Isaac Lab、Git 和本项目；
+- 正文不教授 Ubuntu、终端基础或 NVIDIA 驱动，直接从 conda 和 RL 环境配置开始；
+- 在 RL 内容之前按依赖顺序讲清 conda、Python 环境、pip、Isaac Sim、CUDA PyTorch、Isaac Lab、Git 和本项目；
 - 每个环境组件先解释“是什么、为什么需要”，再提供版本固定的官方文档、安装命令、成功标准和常见失败；
 - 官方资料放在对应步骤旁边，文末只保留精简索引；
 - 使用 Isaac Sim 5.1 / Python 3.11 / Isaac Lab 2.3.0 兼容线，不使用会跳转到 Isaac Sim 6.x 的 `latest` 安装命令；
@@ -20,20 +20,19 @@
 
 1. 文档用途、读者条件和版本表；
 2. 环境依赖关系图；
-3. Ubuntu 与硬件检查；
-4. NVIDIA 驱动安装与 `nvidia-smi` 验收；
-5. 终端、路径、Python、pip、conda 的最小概念；
-6. Miniconda 与独立 Python 环境；
-7. Isaac Sim 5.1 与 CUDA PyTorch；
-8. Isaac Lab 2.3.0；
-9. Git 与 `himloco_lab`；
-10. 环境总验收和第一轮冒烟训练；
-11. RL 数据闭环及 observation/action/command/reward 等工程模块；
-12. HimLoco 论文—代码映射、训练诊断和常见问题。
+3. conda 是什么，以及 Miniconda 安装检查；
+4. 创建独立 Python 3.11 环境；
+5. pip 是什么，以及它与当前 conda 环境的关系；
+6. Isaac Sim 5.1 与 CUDA PyTorch；
+7. Isaac Lab 2.3.0；
+8. Git 与 `himloco_lab`；
+9. 环境总验收和第一轮冒烟训练；
+10. RL 数据闭环及 observation/action/command/reward 等工程模块；
+11. HimLoco 论文—代码映射、训练诊断和常见问题。
 
 ## 1. 课程定位
 
-这不是一份从数学推导开始的强化学习理论教材，而是一套以 UIKA 四足机器人和 HimLoco 为案例的工程实验课。理论概念由授课者提供的视频与阅读材料承担；本文档负责把概念落实到 Ubuntu 操作、Isaac Lab 配置、训练实验、日志分析和故障排查中。
+这不是一份从数学推导开始的强化学习理论教材，而是一套以 UIKA 四足机器人和 HimLoco 为案例的工程实验课。理论概念由授课者提供的视频与阅读材料承担；本文档从 conda 环境开始，负责把概念落实到 Isaac Lab 配置、训练实验、日志分析和故障排查中。
 
 课程的最终成果是：读者能够在 `himloco_lab` 中定位并修改 command、observation、action、reward、termination、event 和 curriculum，完成受控的对照训练，并依据 TensorBoard 曲线和机器人行为给出初步诊断。
 
@@ -42,13 +41,13 @@
 目标读者：
 
 - 掌握基础 Python 或 C 语言语法；
-- 不要求会 Ubuntu、Git、conda 或常用终端命令；
+- 不要求会 Git、conda 或强化学习工具链；
 - 不要求学过强化学习、机器人学或 Isaac Lab；
 - 使用 Ubuntu 22.04 和 NVIDIA 独立显卡，显卡型号不统一。
 
 课程内负责：
 
-- 完成任务所需的最小 Ubuntu、终端、Git 和 conda 知识；
+- 完成任务所需的最小 Git、conda 和终端命令知识；
 - 固定并验证可复现的软件版本；
 - 解释本仓库的训练数据流和主要配置接口；
 - 设计可在不同显卡上缩放的实验；
@@ -99,7 +98,7 @@
 
 1. **本节问题**：一句话描述要解决的行为问题。
 2. **完成标准**：列出可验证结果，而不是“理解某概念”。
-3. **课前材料**：指向课程主页上对应的视频或理论文档。
+3. **理论补充**：提示本节适合搭配学习的理论主题。
 4. **最少术语**：只解释完成实验必需的词。
 5. **代码地图**：给出入口文件、配置文件和实现文件。
 6. **先预测**：要求学生在运行前写下预期。
