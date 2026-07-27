@@ -76,3 +76,8 @@ class UIKAFlatPPORunnerCfg(UIKAPPORunnerCfg):
 @configclass
 class UIKALowerPPORunnerCfg(UIKAPPORunnerCfg):
     experiment_name = "uika_lower"
+
+
+@configclass
+class UIKARoughNormalGaitPPORunnerCfg(UIKAPPORunnerCfg):
+    experiment_name = "uika_rough_normal_gait"

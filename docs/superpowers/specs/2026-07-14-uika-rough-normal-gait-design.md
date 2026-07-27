@@ -48,11 +48,18 @@ The only approved reward adaptations are:
 | `contact_forces` | disabled (`None`) | weight `-1e-2`, threshold `100 N`, feet only | Penalize excessive foot impact using the current normal-velocity tuning baseline. |
 | `feet_slide` | zero weight (`-0.0`) | weight `-0.1` | Penalize body-frame horizontal velocity of feet while in contact. |
 
+Six later user-owned tuning changes are intentionally retained as residual differences
+from the locked master-lower baseline: `upward=0.25` (baseline `0.0`),
+`undesired_contacts=-1.0` (baseline `-0.0`), `track_lin_vel_xy=1.2`
+(baseline `1.0`), `track_ang_vel_z=0.6` (baseline `0.5`), `stand_still=-3.0`
+(baseline `-2.0`), and `joint_pos_penalty=-0.0` (baseline `-0.3`). They are
+explicit tuning choices, not normal-pose adaptations.
+
 Key copied lower overrides include:
 
 - `flat_orientation_l2=-0.2`, `base_height_l2=-1.0`, and `body_lin_acc_l2=-1e-4`;
-- `joint_pos_limits=-1.0`, `stand_still=-2.0`, and `joint_pos_penalty=-0.3`;
-- `track_lin_vel_xy=1.0` and `track_ang_vel_z=0.5`;
+- `joint_pos_limits=-1.0`, tuned `stand_still=-3.0`, and tuned `joint_pos_penalty=-0.0`;
+- tuned `track_lin_vel_xy=1.2` and `track_ang_vel_z=0.6`;
 - `feet_air_without_cmd=-2.0` and `single_foot_air_time=-2.0` with `threshold=0.25`;
 - the same `None` or zero-weight settings for termination reward, joint velocity terms, joint mirror, air-time shaping, prolonged swing, foot height/lift, and gait synchronization terms;
 - active `contact_forces=-1e-2` with a `100 N` threshold and active `feet_slide=-0.1` as deliberate additions requested after the initial design.
@@ -90,7 +97,9 @@ Implementation follows RED-GREEN-REFACTOR:
 2. Verify registration names and train/play entry points.
 3. Verify the training and play configs inherit the normal rough environment classes and replace only rewards.
 4. Verify `0.33 m` base height and normal `UIKA_CFG.init_state.joint_pos` references.
-5. Verify all copied lower override weights, parameters, and disabled terms, plus the two approved contact adaptations.
+5. Verify all 28 copied lower overrides against a checked-in normalized-AST manifest,
+   with an explicit nine-term difference allowlist, and verify the six inherited
+   normal-velocity rewards.
 6. Verify the new source never references `UIKA_LOWER_JOINT_POS_TARGET`.
 7. Verify the isolated PPO experiment name.
 8. Run Python compilation and the relevant UIKA test suite.

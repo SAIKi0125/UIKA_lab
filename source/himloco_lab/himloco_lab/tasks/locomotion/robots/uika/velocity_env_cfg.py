@@ -333,12 +333,12 @@ class EventCfg:
         mode="reset",
         params={
             "pose_range": {
-                "x": (-0.5, 0.5),
-                "y": (-0.5, 0.5),
-                "z": (0.0, 0.2),
-                "roll": (-1, 1),
-                "pitch": (-1, 1),
-                "yaw": (-1, 1),
+                "x": (-1.0, 1.0),
+                "y": (-1.0, 1.0),
+                "z": (0.0, 0.0),
+                "roll": (-0.3, 0.3),
+                "pitch": (-0.3, 0.3),
+                "yaw": (-3.14, 3.14),
                 # "x": (-3.5, -3.5),
                 # "y": (-1.0, 1.0),
                 # "z": (0.0, 0.0),
@@ -353,11 +353,11 @@ class EventCfg:
                 # "roll": (-0.5, 0.5),
                 # "pitch": (-0.5, 0.5),
                 # "yaw": (-0.5, 0.5),
-                "x": (-0.0, 0.0),
-                "y": (-0.0, 0.0),
-                "z": (-0.0, 0.0),
-                "roll": (-0.0, 0.0),
-                "pitch": (-0.0, 0.0),
+                "x": (-0.2, 0.2),
+                "y": (-0.2, 0.2),
+                "z": (-0.2, 0.2),
+                "roll": (-0.05, 0.05),
+                "pitch": (-0.05, 0.05),
                 "yaw": (-0.0, 0.0),
             },
         },
@@ -516,7 +516,7 @@ class RewardsCfg:
     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=0)
     base_height_l2 = RewTerm(
         func=mdp.base_height_l2,
-        weight=-0.0,
+        weight=-10.0,
         params={
             "target_height": 0.33,
             "asset_cfg": SceneEntityCfg("robot", body_names="base"),
@@ -598,7 +598,7 @@ class RewardsCfg:
     contact_forces = RewTerm(
         func=mdp.contact_forces,
         # weight=-1.5e-4,
-        weight=-1.5e-4,
+        weight=-1e-2,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"), "threshold": 100.0},
     )
 
@@ -624,7 +624,7 @@ class RewardsCfg:
     feet_air_time = RewTerm(
         func=mdp.feet_air_time,
         # weight=0.1,
-        weight=0.1,
+        weight=1.0,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "command_name": "base_velocity",
@@ -634,7 +634,7 @@ class RewardsCfg:
 
     feet_air_time_variance = RewTerm(
         func=mdp.feet_air_time_variance_penalty,
-        weight=-1.0,
+        weight=-4.0,
         # weight=0.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
     )
@@ -698,7 +698,7 @@ class RewardsCfg:
 
     feet_height = RewTerm(
         func=mdp.feet_height,
-        weight=-0.0,
+        weight=-2.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
             "tanh_mult": 2.0,
@@ -709,10 +709,10 @@ class RewardsCfg:
 
     feet_height_body = RewTerm(
         func=mdp.feet_height_body,
-        weight=-5.0,
+        weight=-2.5,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            "target_height": -0.23,
+            "target_height": -0.33,
             "tanh_mult": 2.0,
             "command_name": "base_velocity",
         },
@@ -723,8 +723,8 @@ class RewardsCfg:
         weight=0.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            "minimum_height": -0.30,
-            "target_height": -0.10,
+            "minimum_height": -0.33,
+            "target_height": -0.13,
             "tanh_mult": 2.0,
             "command_name": "base_velocity",
         },
