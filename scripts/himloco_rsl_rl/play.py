@@ -10,6 +10,10 @@
 import argparse
 import sys
 
+from isaacsim_compat import configure_isaacsim_urdf_importer
+
+configure_isaacsim_urdf_importer()
+
 from isaaclab.app import AppLauncher
 
 # local imports

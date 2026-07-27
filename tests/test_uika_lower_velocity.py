@@ -162,11 +162,12 @@ def test_reward_helpers_accept_named_lower_target():
     assert "def single_foot_air_time(" in source
 
 
-def test_train_and_play_enable_sim5_urdf_importer_after_app_launch():
+def test_train_and_play_configure_sim5_urdf_importer_before_app_launcher():
     for script_path in (TRAIN_PATH, PLAY_PATH):
         source = script_path.read_text(encoding="utf-8")
-        app_launch = source.index("simulation_app = app_launcher.app")
-        extension_import = source.index("from isaacsim.core.utils.extensions import enable_extension")
-        extension_enable = source.index('enable_extension("isaacsim.asset.importer.urdf")')
+        compat_import = source.index("from isaacsim_compat import configure_isaacsim_urdf_importer")
+        compat_call = source.index("configure_isaacsim_urdf_importer()")
+        app_launcher_import = source.index("from isaaclab.app import AppLauncher")
 
-        assert app_launch < extension_import < extension_enable
+        assert compat_import < compat_call < app_launcher_import
+        assert "enable_extension" not in source

@@ -68,6 +68,8 @@ _build
 tests/*
 !tests/test_uika_velocity_pace_randomization.py
 !tests/test_uika_lower_velocity.py
+!tests/test_isaacsim_compat.py
+!tests/test_uika_rough_normal_gait.py
 
 # Docker history
 .isaac-lab-docker-history
